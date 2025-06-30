@@ -6,6 +6,7 @@ import { Injectable } from '@nestjs/common';
 import { SignUpDto } from './dto/signup-dto';
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { User } from 'generated/prisma';
 
 @Injectable()
 export class AuthService {
@@ -23,6 +24,7 @@ export class AuthService {
     loginDto: LoginDto,
     response: Response,
   ): Promise<{ message: string; status: number }> {
+    //login user and store active session in DB
     if (!loginDto.password)
       return { message: `Incomplete credentials`, status: 400 };
     const {
@@ -44,34 +46,38 @@ export class AuthService {
     if (isValid) {
       if (rememberMe) {
         // Handle "Remember Me" functionality
-        const rememberToken = randomBytes(32).toString('hex')
+        const rememberToken = randomBytes(32).toString('hex');
         response.cookie('rememberMe', rememberToken, {
           maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
           httpOnly: true,
           sameSite: 'lax',
         });
-        await this.storeSession(id, null, rememberToken);
+        await this.storeSession(id, rememberToken);
       }
+      const sessionId = await this.storeSession(id);
       const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
-      const token = await this.encrypt({ id, expiresAt });
-       await this.storeSession(id, token);
-      response.cookie('sessionId', token, {
+      const token = await this.encrypt({ id, expiresAt, sessionId });
+      response.cookie('sessionToken', token, {
         maxAge: 2 * 24 * 60 * 60 * 1000, // 30 days
         httpOnly: true,
         sameSite: 'lax',
       });
+
       return { message: 'login successful', status: 200 };
     }
     return { message: 'Invalid credentials', status: 400 };
   }
 
-  async storeSession(userId: string, token: string | null = '', rememberToken: string| null = '') {
+  async storeSession(
+    // store session in database
+    userId: string,
+    rememberToken: string | null = '',
+  ) {
     //save session to database
     const { id } = await this.prisma.session.create({
       data: {
         userId,
-        token,
-        rememberToken
+        rememberToken,
       },
       select: {
         id: true,
@@ -81,6 +87,7 @@ export class AuthService {
   }
 
   async encrypt(payload: JWTPayload) {
+    // encrypt payload
     const sessionToken = await new SignJWT(payload)
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
@@ -90,6 +97,7 @@ export class AuthService {
   }
 
   async decrypt(sessionToken: string | undefined = '') {
+    // decrypt payload
     const payload = await jwtVerify(sessionToken, this.encodedKey, {
       algorithms: ['HS256'],
     });
@@ -109,19 +117,16 @@ export class AuthService {
     });
   }
 
-  findAll() {
-    return `This action returns all auth`;
+  async logout(response: Response) {
+    response.clearCookie('rememberMe');
+    response.clearCookie('sessionToken  ');
+    return { message: 'Logout successful' };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} auth`;
+  async verifyEmail(email: string) {}
+
+  async validateUser(profile: any): Promise<{ status: boolean; user: User }> {
+    return { status: true, user: profile };
   }
 
-  update(id: number, updateAuthDto) {
-    return `This action updates a #${id} ath`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} auth`;
-  }
 }

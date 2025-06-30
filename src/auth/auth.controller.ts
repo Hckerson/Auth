@@ -8,18 +8,20 @@ import {
   Res,
   Param,
   Delete,
+  UseGuards
 } from '@nestjs/common';
 import { Response } from 'express';
 import { LoginDto } from './dto/login-dto';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup-dto';
+import { AuthGuard } from '@nestjs/passport';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-
+  @UseGuards(AuthGuard('google'))
   @Post('login')
-  login(
+  async login(
     @Body() createAuthDto: LoginDto,
     @Res({ passthrough: true }) response: Response,
   ) {
@@ -27,29 +29,18 @@ export class AuthController {
   }
 
   @Post('signup')
-  signup(@Body() signUpDto: SignUpDto) {
+  async signup(@Body() signUpDto: SignUpDto) {
     return this.authService.signUp(signUpDto);
   }
 
   @Post()
-  verifyEmail(@Body() createAuthDto: SignUpDto) {}
-  @Get()
-  findAll() {
-    return this.authService.findAll();
+  async verifyEmail(@Body() email:string) {
+    return this.authService.verifyEmail(email);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.authService.findOne(+id);
+  @Get('logout')
+  logout(@Res() response: Response) {
+    return this.authService.logout(response);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateAuthDto) {
-    return this.authService.update(+id, updateAuthDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.authService.remove(+id);
-  }
 }
