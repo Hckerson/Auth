@@ -6,6 +6,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { Mailtrap } from './service/mailtrap.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { VerificationLink } from 'src/lib/verificationLink.service';
+import { RiskAssesmentService } from 'src/lib/risk-assesment.service';
 
 @Module({
   controllers: [AuthController],
@@ -14,6 +15,7 @@ import { VerificationLink } from 'src/lib/verificationLink.service';
     PrismaService,
     Mailtrap,
     VerificationLink,
+    RiskAssesmentService,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

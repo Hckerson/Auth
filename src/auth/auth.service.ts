@@ -28,8 +28,10 @@ export class AuthService {
   async login(
     loginDto: LoginDto,
     response: Response,
+    threatLevel: number
   ): Promise<{ message: string; status: number }> {
     //login user and store active session in DB
+    
     if (!loginDto.password)
       return { message: `Incomplete credentials`, status: 400 };
     const {
@@ -37,8 +39,6 @@ export class AuthService {
       password,
       rememberMe,
       twoFactorCode,
-      deviceInfo,
-      ipAddress,
     } = loginDto;
 
     try {
@@ -61,6 +61,11 @@ export class AuthService {
           });
           await this.storeSession(id, rememberToken);
         }
+        
+        if (threatLevel > 60){
+          return { message: `Threat level too high`, status: 400 };
+        }
+
         const sessionId = await this.storeSession(id);
         const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
         const token = await this.encrypt({ id, expiresAt, sessionId });

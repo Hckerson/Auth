@@ -15,14 +15,28 @@ datasource db {
 }
 
 model User {
-  id              String    @id @default(uuid())
-  email           String    @unique
-  password        String
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                String    @id @default(uuid())
+  email             String    @unique
+  password          String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
   verificationToken String?
-  speakeasySecret String?
-  sessions        Session[]
+  speakeasySecret   String?
+  lastLoginIp       String?
+  lastKnownDevice   String?
+  sessions          Session[]
+  geoData           GeoData?
+}
+
+model GeoData {
+  id       String @id @default(uuid())
+  userId   String @unique
+  range    Json
+  country  String
+  region   String
+  timezone String
+  city     String
+  user     User   @relation(fields: [userId], references: [id])
 }
 
 model Session {
