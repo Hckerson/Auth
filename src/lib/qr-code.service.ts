@@ -1,6 +1,6 @@
 import QRCode from 'qrcode';
 export class QrcodeService {
-  constructor() {}
+  constructor() { }
   async generateQrCode(text: string) {
     try {
       return await QRCode.toDataURL(text, { errorCorrectionLevel: 'M' });
