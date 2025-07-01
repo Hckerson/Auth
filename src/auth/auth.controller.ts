@@ -8,18 +8,15 @@ import {
   Res,
   Param,
   Delete,
-  UseGuards
 } from '@nestjs/common';
 import { Response } from 'express';
 import { LoginDto } from './dto/login-dto';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup-dto';
-import { AuthGuard } from '@nestjs/passport';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-  @UseGuards(AuthGuard('google'))
   @Post('login')
   async login(
     @Body() createAuthDto: LoginDto,
