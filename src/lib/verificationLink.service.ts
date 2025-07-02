@@ -9,19 +9,21 @@ export class VerificationLink {
 
   async generateVerificationLink(email: string) {
     // generate verification link and store in database
+    console.log(`Generating verification link for ${email}`);
     this.token = genToken();
-    await this.storeVerificatoinLink(email);
+    await this.storeVerificationToken(email);
     return `https://authTekcify.vercel.app/verify?email=${email}&token=${this.token}`;
   }
 
-  async storeVerificatoinLink(email: string) {
+  async storeVerificationToken(email: string) {
     // function to store verification token in database
+    console.log(`Storing verification link`)
     const user = await this.prisma.user.update({
       where: {
         email: email,
       },
       data: {
-        verificationToken: this.token,
+        verificationToken: this.token as string,
       },
     });
   }

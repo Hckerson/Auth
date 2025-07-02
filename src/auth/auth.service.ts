@@ -1,8 +1,11 @@
-import bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcryptjs';
+import { createHash } from 'crypto';
+import * as geoip from 'geoip-lite';
+import { Lookup } from 'geoip-lite';
 import { User } from 'generated/prisma';
 import { randomBytes } from 'node:crypto';
 import { LoginDto } from './dto/login-dto';
-import { Response, Request } from 'express';
+import { Request, Response } from 'express';
 import { Injectable } from '@nestjs/common';
 import { SignUpDto } from './dto/signup-dto';
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
@@ -28,18 +31,13 @@ export class AuthService {
   async login(
     loginDto: LoginDto,
     response: Response,
-    threatLevel: number
+    threatLevel: number,
   ): Promise<{ message: string; status: number }> {
     //login user and store active session in DB
-    
+
     if (!loginDto.password)
       return { message: `Incomplete credentials`, status: 400 };
-    const {
-      email,
-      password,
-      rememberMe,
-      twoFactorCode,
-    } = loginDto;
+    const { email, password, rememberMe, twoFactorCode } = loginDto;
 
     try {
       const userInfo = await this.prisma.user.findUnique({
@@ -47,6 +45,7 @@ export class AuthService {
           email: email,
         },
       });
+      console.log(`Found userInfo ${userInfo}`);
       if (!userInfo) return { message: `User not found`, status: 400 };
       const { password: hashedPassword, id } = userInfo;
       const isValid = await bcrypt.compare(password, hashedPassword);
@@ -61,8 +60,8 @@ export class AuthService {
           });
           await this.storeSession(id, rememberToken);
         }
-        
-        if (threatLevel > 60){
+
+        if (threatLevel > 55) {
           return { message: `Threat level too high`, status: 400 };
         }
 
@@ -89,6 +88,7 @@ export class AuthService {
     userId: string,
     rememberToken: string | null = '',
   ) {
+    console.log(`Storing session`);
     //save session to database
     const { id } = await this.prisma.session.create({
       data: {
@@ -120,18 +120,54 @@ export class AuthService {
     return payload;
   }
 
-  async signUp(signUpDto: SignUpDto) {
+  async signUp(signUpDto: SignUpDto, ipAddress: string, request: Request) {
     // register user with email and password
+    const { email, password } = signUpDto;
+
+    //check if user Exists
+    const user = await this.prisma.user.findUnique({
+      where: {
+        email: email,
+      },
+    });
+
+    if (user) return `User already exists`;
+
+    const geo = geoip.lookup('185.199.110.153');
+    if (geo === null) return 'Error getting geo data';
+    const { region, country, timezone, city }: Lookup = geo;
+
+    const userAgent = request.headers['user-agent'] || '';
+    const acceptLanguage = request.headers['accept-language'] || '';
+    const fingerPrint = `${userAgent}-${acceptLanguage}-${ipAddress}`;
+    const hash = createHash('sha256').update(fingerPrint).digest('hex');
+
     // create user in database
-    const { email, password, firstName, lastName } = signUpDto;
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
-      return this.prisma.user.create({
-        data: {
-          email,
-          password: hashedPassword,
-        },
-      });
+      try {
+        return this.prisma.user.create({
+          data: {
+            email,
+            password: hashedPassword,
+            lastLoginIp: ipAddress,
+            lastKnownDevice: hash,
+            geoData: {
+              create: {
+                region,
+                country,
+                timezone,
+                city,
+              },
+            },
+          },
+          include: {
+            geoData: true,
+          },
+        });
+      } catch (error) {
+        console.error(`Error creating user in db: ${error}`);
+      }
     } catch (error) {
       console.error(`Error signing up: ${error}`);
     }
@@ -139,13 +175,13 @@ export class AuthService {
 
   async logout(response: Response) {
     response.clearCookie('rememberMe');
-    response.clearCookie('sessionToken  ');
+    response.clearCookie('sessionToken');
     return { message: 'Logout successful' };
   }
 
-  async verifyEmail(email: string, verificationLink: string) {
+  async sendVerificationEmail(email: string, verificationLink: string) {
     //send verification email
-    return this.mailtrap.sendEmail({
+    const response = await this.mailtrap.sendEmail({
       to: email,
       subject: 'Verify your email',
       text: 'Verify your email',
@@ -160,11 +196,44 @@ export class AuthService {
       </div>
     `,
     });
+    if (!response?.success)
+      return { message: 'Error sending email', status: 500 };
+    return { message: 'Email sent', status: 200 };
   }
+
+  async verifyEmail(email: string, token: string) {
+
+    //compareToken
+    const user = await this.prisma.user.findUnique({
+      where: {
+        email: email,
+        verificationToken: token,
+      },
+      select:{
+        verificationToken: true
+      }
+    })
+    if(!user?.verificationToken) return { message: 'Token not found', status: 400 };
+    const isValid =user.verificationToken == token
+    if(!isValid) return { message: 'Invalid token', status: 400 };
+    // verify email
+    return this.prisma.user.update({
+      where: {
+        email: email,
+        verificationToken: token,
+      },
+      data: {
+        verificationToken: null,
+        emailVerified: true,
+      },
+    });
+  }
+
 
   async sendResetPasswordLink(email: string, verificationLink: string) {
     // send retset password link
-    return this.mailtrap.sendEmail({
+    console.log(`Sending password reset link for ${email}`);
+    const response = await this.mailtrap.sendEmail({
       to: email,
       subject: 'Reset your password',
       text: 'Reset your password',
@@ -179,6 +248,9 @@ export class AuthService {
       </div>
     `,
     });
+    if (!response?.success)
+      return { message: 'Error sending email', status: 500 };
+    return { message: 'Email sent', status: 200 };
   }
 
   async resetPassword(resetPasswordDto: ResetPasswordDto) {
@@ -205,7 +277,7 @@ export class AuthService {
         return { message: 'Invalid token', status: 400 };
       }
 
-      if (person?.updatedAt.getTime() + 3600000 < Date.now()) {
+      if (person?.updatedAt.getTime() + 300000 < Date.now()) {
         return { message: 'Token expired', status: 400 };
       }
     } catch (error) {
@@ -225,7 +297,4 @@ export class AuthService {
     return { message: 'Password reset successful', status: 200 };
   }
 
-  async validateUser(profile: any): Promise<{ status: boolean; user: User }> {
-    return { status: true, user: profile };
-  }
 }

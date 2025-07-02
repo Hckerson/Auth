@@ -23,10 +23,10 @@ export class Oauth2Strategy extends PassportStrategy(Strategy) {
 
   async validate(accessToken: string, refreshToken: string, profile: any) {
     console.log(profile)
-    const user = await this.authService.validateUser(profile);
-    if (!user) {
-      throw new UnauthorizedException();
-    }
-    return user;
+    // const user = await this.authService.validateUser(profile);
+    // if (!user) {
+    //   throw new UnauthorizedException();
+    // }
+    // return user;
   }
 }

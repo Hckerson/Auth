@@ -1,13 +1,13 @@
-import geoip from 'geoip-lite';
 import { Request } from 'express';
 import { createHash } from 'crypto';
+import * as geoip from 'geoip-lite';
 import { Lookup } from 'geoip-lite';
 import { Injectable } from '@nestjs/common';
 import { LoginDto } from 'src/auth/dto/login-dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 @Injectable()
 export class RiskAssesmentService {
-  private threatLevel: number = 0;
+  threatLevel: number = 0;
   constructor(private readonly prisma: PrismaService) {}
 
   async getThreatLevel(loginDto: LoginDto, request: Request) {
@@ -19,7 +19,9 @@ export class RiskAssesmentService {
   }
 
   async geoipAssessment(ipAddress: string, email: string) {
-    const geo = geoip.lookup(ipAddress);
+    const geo = geoip.lookup('24.48.0.1');
+    // const geo = geoip.lookup(ipAddress);
+    console.log(geo)
     if (!geo) return this.threatLevel;
     const { region, country, timezone, city }: Lookup = geo;
 
@@ -32,7 +34,7 @@ export class RiskAssesmentService {
           geoData: true,
         },
       });
-      
+      console.log(`Found user ${user?.geoData}`)
 
       if (!user?.geoData) return this.threatLevel;
 
@@ -48,7 +50,8 @@ export class RiskAssesmentService {
       if (country !== existingCountry) this.threatLevel += 15;
       if (timezone !== existingTimezone) this.threatLevel += 15;
       if (city !== existingCity) this.threatLevel += 15;
-
+      console.log(`Ending geoip assessment`)
+      console.log(`Threat level: ${this.threatLevel}`)
       const geoData = user?.geoData;
       if (!geoData) {
         try {
@@ -82,7 +85,7 @@ export class RiskAssesmentService {
     ipAddress: string,
   ) {
     //get device fingerPrint
-    console.error(`Starting fingerprint accessment for ${email}`);
+    console.log(`Starting fingerprint accessment for ${email}`);
     const userAgent = request.headers['user-agent'] || '';
     const acceptLanguage = request.headers['accept-language'] || '';
     const fingerPrint = `${userAgent}-${acceptLanguage}-${ipAddress}`;
@@ -104,7 +107,8 @@ export class RiskAssesmentService {
 
     if (lastKnownDevice !== hash) this.threatLevel += 15;
     if (lastLoginIp !== ipAddress) this.threatLevel += 15;
-
+    console.log(`Ending fingerprint accessment for ${email}`)
+    console.log(`Threat level: ${this.threatLevel}`)
     await this.prisma.user.update({
       where: {
         email: email,

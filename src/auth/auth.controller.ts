@@ -1,6 +1,6 @@
 import { Req } from '@nestjs/common';
 import { LoginDto } from './dto/login-dto';
-import { Response, Request } from 'express';
+import { Response, Request, request } from 'express';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup-dto';
 import { ResetPasswordDto } from './dto/reset-password-dto';
@@ -43,7 +43,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request,
   ) {
-    if (!loginDto) return `No loginDto passed`
+    if (!loginDto) return `No loginDto passed`;
     const ipAddress = this.getIpAddress(request);
     const updatedLoginDto = { ...loginDto, ipAddress };
     try {
@@ -51,7 +51,8 @@ export class AuthController {
         updatedLoginDto,
         request,
       );
-
+      this.riskAssesmentService.threatLevel = 0;
+      console.log(`Threat level: ${threatLevel}`);
       return this.authService.login(updatedLoginDto, response, threatLevel);
     } catch (error) {
       console.error(`Error accesing threat level`);
@@ -59,8 +60,9 @@ export class AuthController {
   }
 
   @Post('signup')
-  async signup(@Body() signUpDto: SignUpDto) {
-    return this.authService.signUp(signUpDto);
+  async signup(@Body() signUpDto: SignUpDto, @Req() request: Request) {
+    const ipAddress = this.getIpAddress(request) || '';
+    return this.authService.signUp(signUpDto, ipAddress, request);
   }
 
   @Post('reset-password')
@@ -69,17 +71,26 @@ export class AuthController {
   }
 
   @Post('send-reset-password-link')
-  async sendResetPasswordLink(@Body() email: string) {
+  async sendResetPasswordLink(@Body('email') email: string) {
     const verificationLink =
       await this.verificationLink.generateVerificationLink(email);
-    return this.authService.sendResetPasswordLink(email, verificationLink);
+    console.log(`Verification link: ${verificationLink}`);
+    return await this.authService.sendResetPasswordLink(
+      email,
+      verificationLink,
+    );
+  }
+
+  @Post('send-email-verification-link')
+  async sendVerificaitonLink(@Body('email') email: string) {
+    const verificationLink =
+      await this.verificationLink.generateVerificationLink(email);
+    return this.authService.sendVerificationEmail(email, verificationLink);
   }
 
   @Post('verify-email')
-  async verifyEmail(@Body() email: string) {
-    const verificationLink =
-      await this.verificationLink.generateVerificationLink(email);
-    return this.authService.verifyEmail(email, verificationLink);
+  async verifyEmail(@Body('email') email: string, @Body('token') token: string) {
+    return await this.authService.verifyEmail(email, token);
   }
 
   @Get('logout')

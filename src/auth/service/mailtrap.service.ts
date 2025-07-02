@@ -21,13 +21,15 @@ export class Mailtrap implements OnModuleInit {
   }
 
   async sendEmail(mail: SendMailOptions) {
+    console.log(`Sending email`);
     try {
       const info = await this.transporter.sendMail({
         from: process.env.SENDER_EMAIL,
         ...mail,
       });
       console.log('Message sent: %s', info.messageId);
-      return info;
+      if(!info) return {success: false,  message: 'Email not sent', status: 400 };
+      return {success: true, message: 'Email sent', status: 200};
     } catch (error) {
       console.error(`Error sending email: ${error}`);
     }
