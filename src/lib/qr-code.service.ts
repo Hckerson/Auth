@@ -1,4 +1,4 @@
-import QRCode from 'qrcode';
+import * as QRCode from 'qrcode';
 export class QrcodeService {
   constructor() { }
   async generateQrCode(text: string) {

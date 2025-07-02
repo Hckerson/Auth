@@ -20,6 +20,7 @@ model User {
   password          String
   emailVerified     Boolean   @default(false)
   createdAt         DateTime  @default(now())
+  twofaVerified       Boolean   @default(false)
   updatedAt         DateTime  @updatedAt
   verificationToken String?
   speakeasySecret   String?

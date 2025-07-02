@@ -48,6 +48,7 @@ export class AuthService {
       if (!userInfo) return { message: `User not found`, status: 400 };
       const { password: hashedPassword, id } = userInfo;
       const isValid = await bcrypt.compare(password, hashedPassword);
+      console.log(`Is valid: ${isValid}`);
       if (isValid) {
         if (rememberMe) {
           // Handle "Remember Me" functionality
@@ -75,11 +76,11 @@ export class AuthService {
 
         return { message: 'login successful', status: 200 };
       }
+      return { message: 'Invalid credentials', status: 400 };
     } catch (error) {
       console.error(`Error finding user in db`);
     }
-
-    return { message: 'Invalid credentials', status: 400 };
+    return { message: 'error logging in user', status: 400 };
   }
 
   async storeSession(
@@ -201,20 +202,20 @@ export class AuthService {
   }
 
   async verifyEmail(email: string, token: string) {
-
     //compareToken
     const user = await this.prisma.user.findUnique({
       where: {
         email: email,
         verificationToken: token,
       },
-      select:{
-        verificationToken: true
-      }
-    })
-    if(!user?.verificationToken) return { message: 'Token not found', status: 400 };
-    const isValid =user.verificationToken == token
-    if(!isValid) return { message: 'Invalid token', status: 400 };
+      select: {
+        verificationToken: true,
+      },
+    });
+    if (!user?.verificationToken)
+      return { message: 'Token not found', status: 400 };
+    const isValid = user.verificationToken == token;
+    if (!isValid) return { message: 'Invalid token', status: 400 };
     // verify email
     return this.prisma.user.update({
       where: {
@@ -227,7 +228,6 @@ export class AuthService {
       },
     });
   }
-
 
   async sendResetPasswordLink(email: string, verificationLink: string) {
     // send retset password link
@@ -295,5 +295,4 @@ export class AuthService {
     });
     return { message: 'Password reset successful', status: 200 };
   }
-
 }

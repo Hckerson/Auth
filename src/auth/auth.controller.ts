@@ -3,6 +3,7 @@ import { LoginDto } from './dto/login-dto';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup-dto';
+import { SpeakeasyService } from 'src/lib/speakesy.service';
 import { ResetPasswordDto } from './dto/reset-password-dto';
 import { Controller, Get, Post, Body, Res } from '@nestjs/common';
 import { RiskAssesmentService } from 'src/lib/risk-assesment.service';
@@ -13,6 +14,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly verificationLink: VerificationLink,
+    private readonly speakeasyService: SpeakeasyService,
     private readonly riskAssesmentService: RiskAssesmentService,
   ) {}
 
@@ -51,7 +53,6 @@ export class AuthController {
         updatedLoginDto,
         request,
       );
-      this.riskAssesmentService.threatLevel = 0;
       console.log(`Threat level: ${threatLevel}`);
       return this.authService.login(updatedLoginDto, response, threatLevel);
     } catch (error) {
@@ -81,6 +82,29 @@ export class AuthController {
     );
   }
 
+  @Post('2fa/setup')
+  async setup2fa(@Req() request: Request) {
+    const user = request.cookies['sessionToken'];
+    const userData = await this.authService.decrypt(user);
+    if (!userData) return;
+    const { id } = userData.payload;
+    const otpauthUrl = await this.speakeasyService.setupTwoFactor(id as string);
+    const qrCode = await this.speakeasyService.getQrCodeForUser(id as string);
+    return { otpauthUrl, qrCode };
+  }
+
+  @Post('2fa/verify')
+  async verify2fa(@Req() request: Request, @Body('token') token: string) {
+    const user = request.cookies['sessionToken'];
+    const userData = await this.authService.decrypt(user);
+    if (!userData) return;
+    const { id } = userData.payload;
+    console.log(`Verifying token for user ${id}`);
+    const valid = await this.speakeasyService.verifyToken(id as string, token);
+    if (valid) await this.speakeasyService.update2faStatus(id as string);
+    return { success: valid };
+  }
+
   @Post('send-email-verification-link')
   async sendVerificaitonLink(@Body('email') email: string) {
     const verificationLink =
@@ -89,7 +113,10 @@ export class AuthController {
   }
 
   @Post('verify-email')
-  async verifyEmail(@Body('email') email: string, @Body('token') token: string) {
+  async verifyEmail(
+    @Body('email') email: string,
+    @Body('token') token: string,
+  ) {
     return await this.authService.verifyEmail(email, token);
   }
 

@@ -1,64 +1,77 @@
 import * as speakeasy from 'speakeasy';
-import { OnModuleInit } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { QrcodeService } from './qr-code.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 
-export class SpeakesayService implements OnModuleInit {
+@Injectable()
+export class SpeakeasyService {
   constructor(
-    private userId: string,
-    private secret: {
-      ascii: string;
-      base32: string;
-      otpauth_url?: string;
-      hex: string;
-    },
     private readonly prisma: PrismaService,
     private readonly qrcodeService: QrcodeService,
   ) {}
-  async onModuleInit() {
-    this.secret = speakeasy.generateSecret();
+
+  /**
+   * Creates and stores a new TOTP secret for the given user,
+   * returns the otpauth URL for QR code generation.
+   */
+  async setupTwoFactor(userId: string): Promise<string> {
+    const secret = speakeasy.generateSecret();
+    // Store the base32 secret in the user record
     await this.prisma.user.update({
-      where: {
-        id: this.userId,
-      },
-      data: {
-        speakeasySecret: this.secret.base32,
-      },
+      where: { id: userId },
+      data: { speakeasySecret: secret.base32 },
     });
+    // Return the URL for the authenticator app
+    return secret.otpauth_url!;
   }
 
-  async generateToken() {
-    const token = speakeasy.totp({
-      secret: this.secret.base32,
+  /**
+   * Generates a QR code image (data URL) for the otpauth URL.
+   */
+  async getQrCodeForUser(userId: string): Promise<string | undefined> {
+    // Retrieve the stored secret
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { speakeasySecret: true },
+    });
+    if (!user?.speakeasySecret) {
+      throw new Error('2FA not set up for this user');
+    }
+    const otpauthUrl = speakeasy.otpauthURL({
+      secret: user.speakeasySecret,
+      label: `MyApp (${userId})`,
       encoding: 'base32',
     });
+    return this.qrcodeService.generateQrCode(otpauthUrl);
   }
 
-  async getQrCode() {
-    if (this.secret.otpauth_url)
-      return this.qrcodeService.generateQrCode(this.secret.otpauth_url);
-  }
-
-  async verifyToken(token: string, id: string) {
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: {
-          id,
-        },
-        select: {
-          speakeasySecret: true,
-        },
-      });
-      if (!user?.speakeasySecret) return `Speakeasy secret not found`;
-      const { speakeasySecret } = user;
-      return speakeasy.totp.verify({
-        secret: speakeasySecret,
-        encoding: 'base32',
-        token,
-        window: 6
-      });
-    } catch (error) {
-      console.error(`Error finding speakeasy secret: ${error}`);
+  /**
+   * Verifies a TOTP token provided by the user.
+   */
+  async verifyToken(userId: string, token: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { speakeasySecret: true },
+    });
+    if (!user?.speakeasySecret) {
+      throw new Error('2FA not set up for this user');
     }
+    return speakeasy.totp.verify({
+      secret: user.speakeasySecret,
+      encoding: 'base32',
+      token,
+      window: 2, // allow one-step clock drift
+    });
+  }
+
+  async update2faStatus(userId: string) {
+    const user = await this.prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        twofaVerified: true,
+      },
+    });
   }
 }
