@@ -2,7 +2,6 @@ import * as bcrypt from 'bcryptjs';
 import { createHash } from 'crypto';
 import * as geoip from 'geoip-lite';
 import { Lookup } from 'geoip-lite';
-import { User } from 'generated/prisma';
 import { randomBytes } from 'node:crypto';
 import { LoginDto } from './dto/login-dto';
 import { Request, Response } from 'express';

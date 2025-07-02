@@ -1,6 +1,6 @@
 import { Req } from '@nestjs/common';
 import { LoginDto } from './dto/login-dto';
-import { Response, Request, request } from 'express';
+import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup-dto';
 import { ResetPasswordDto } from './dto/reset-password-dto';

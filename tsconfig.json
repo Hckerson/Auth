@@ -1,6 +1,9 @@
 {
   "compilerOptions": {
     "module": "commonjs",
+    "paths": {
+      "geoip-lite": ["custom_libs/geoip-lite"],
+    },
     "declaration": true,
     "removeComments": true,
     "emitDecoratorMetadata": true,
