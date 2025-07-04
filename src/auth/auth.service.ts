@@ -133,7 +133,7 @@ export class AuthService {
 
     if (user) return `User already exists`;
 
-    const geo = geoip.lookup('185.199.110.153');
+    const geo = geoip.lookup(ipAddress);
     if (geo === null) return 'Error getting geo data';
     const { region, country, timezone, city }: Lookup = geo;
 

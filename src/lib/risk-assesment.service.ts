@@ -19,7 +19,7 @@ export class RiskAssesmentService {
   }
 
   async geoipAssessment(ipAddress: string, email: string) {
-    const geo = geoip.lookup('24.48.0.1');
+    const geo = geoip.lookup(ipAddress);
     // const geo = geoip.lookup(ipAddress);
     console.log(geo)
     if (!geo) return this.threatLevel;
