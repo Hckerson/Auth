@@ -11,14 +11,16 @@ import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 import { Mailtrap } from './service/mailtrap.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ResetPasswordDto } from './dto/reset-password-dto';
+import { RiskAssesmentService } from 'src/lib/risk-assesment.service';
 
 @Injectable()
 export class AuthService {
   private readonly secret: string;
   private readonly encodedKey: Uint8Array;
   constructor(
-    private prisma: PrismaService,
     private mailtrap: Mailtrap,
+    private prisma: PrismaService,
+    private risk: RiskAssesmentService
   ) {
     this.secret = process.env.COOKIE_SECRET || '';
     if (!this.secret) {
@@ -73,7 +75,7 @@ export class AuthService {
           httpOnly: true,
           sameSite: 'lax',
         });
-
+        this.risk.threatLevel = 0
         return { message: 'login successful', status: 200 };
       }
       return { message: 'Invalid credentials', status: 400 };
