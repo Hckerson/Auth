@@ -11,11 +11,10 @@ export class Mailtrap implements OnModuleInit {
 
   onModuleInit() {
     this.transporter = nodemailer.createTransport({
-      host: process.env.MAILTRAP_HOST || '',
-      port: Number(process.env.MAILTRAP_PORT) || 587,
+      service: 'gmail',
       auth: {
-        user: process.env.MAILTRAP_USERNAME || '',
-        pass: process.env.MAILTRAP_PASSWORD || '',
+        user: process.env.APP_USERNAME || '',
+        pass: process.env.APP_PASSWORD || '',
       },
     });
   }
@@ -28,8 +27,9 @@ export class Mailtrap implements OnModuleInit {
         ...mail,
       });
       console.log('Message sent: %s', info.messageId);
-      if(!info) return {success: false,  message: 'Email not sent', status: 400 };
-      return {success: true, message: 'Email sent', status: 200};
+      if (!info)
+        return { success: false, message: 'Email not sent', status: 400 };
+      return { success: true, message: 'Email sent', status: 200 };
     } catch (error) {
       console.error(`Error sending email: ${error}`);
     }
