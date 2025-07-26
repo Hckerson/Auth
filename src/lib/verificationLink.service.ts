@@ -20,7 +20,7 @@ export class VerificationLink {
     console.log(`Storing verification link`)
     const user = await this.prisma.user.update({
       where: {
-        email: email,
+        email: email.toLowerCase(),
       },
       data: {
         verificationToken: this.token as string,

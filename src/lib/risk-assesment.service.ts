@@ -15,13 +15,11 @@ export class RiskAssesmentService {
     const { ipAddress = '', email = '' } = loginDto;
     await this.geoipAssessment(ipAddress, email);
     await this.fingerprintingAccessment(request, email, ipAddress);
-    return this.threatLevel
+    return this.threatLevel;
   }
 
   async geoipAssessment(ipAddress: string, email: string) {
     const geo = geoip.lookup(ipAddress);
-    // const geo = geoip.lookup(ipAddress);
-    console.log(geo)
     if (!geo) return this.threatLevel;
     const { region, country, timezone, city }: Lookup = geo;
 
@@ -34,7 +32,7 @@ export class RiskAssesmentService {
           geoData: true,
         },
       });
-      console.log(`Found user ${user?.geoData}`)
+      console.log(`Found user ${user?.geoData}`);
 
       if (!user?.geoData) return this.threatLevel;
 
@@ -50,14 +48,14 @@ export class RiskAssesmentService {
       if (country !== existingCountry) this.threatLevel += 15;
       if (timezone !== existingTimezone) this.threatLevel += 15;
       if (city !== existingCity) this.threatLevel += 15;
-      console.log(`Ending geoip assessment`)
-      console.log(`Threat level: ${this.threatLevel}`)
+      console.log(`Ending geoip assessment`);
+      console.log(`Threat level: ${this.threatLevel}`);
       const geoData = user?.geoData;
       if (!geoData) {
         try {
           await this.prisma.user.update({
             where: {
-              email: email,
+              email: email.toLowerCase(),
             },
             data: {
               geoData: {
@@ -90,33 +88,42 @@ export class RiskAssesmentService {
     const acceptLanguage = request.headers['accept-language'] || '';
     const fingerPrint = `${userAgent}-${acceptLanguage}-${ipAddress}`;
     const hash = createHash('sha256').update(fingerPrint).digest('hex');
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: {
+          email: email,
+        },
+        select: {
+          lastKnownDevice: true,
+          lastLoginIp: true,
+        },
+      });
+      if (!user) return;
 
-    const user = await this.prisma.user.findUnique({
-      where: {
-        email: email,
-      },
-      select: {
-        lastKnownDevice: true,
-        lastLoginIp: true,
-      },
-    });
+      const { lastKnownDevice, lastLoginIp } = user;
+  
+      if (lastKnownDevice !== hash) this.threatLevel += 15;
+      if (lastLoginIp !== ipAddress) this.threatLevel += 15;
+      console.log(`Ending fingerprint accessment for ${email}`);
+      console.log(`Threat level: ${this.threatLevel}`);
+      try {
+        await this.prisma.user.update({
+          where: {
+            email: email.toLowerCase(),
+          },
+          data: {
+            lastKnownDevice: hash,
+            lastLoginIp: ipAddress,
+          },
+        });
+      } catch (error) {
+        console.error(`Error updating login deets: ${error}`);
+      }
 
-    if (!user) return;
+    } catch (error) {
+      console.error(`Error fetching user login deets: ${error}`);
+    }
 
-    const { lastKnownDevice, lastLoginIp } = user;
 
-    if (lastKnownDevice !== hash) this.threatLevel += 15;
-    if (lastLoginIp !== ipAddress) this.threatLevel += 15;
-    console.log(`Ending fingerprint accessment for ${email}`)
-    console.log(`Threat level: ${this.threatLevel}`)
-    await this.prisma.user.update({
-      where: {
-        email: email,
-      },
-      data: {
-        lastKnownDevice: hash,
-        lastLoginIp: ipAddress,
-      },
-    });
   }
 }
