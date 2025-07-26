@@ -1,18 +1,25 @@
-import { Req } from '@nestjs/common';
 import { LoginDto } from './dto/login-dto';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup-dto';
+import { Param, Req, UseGuards } from '@nestjs/common';
 import { SpeakeasyService } from 'src/lib/speakesy.service';
 import { ResetPasswordDto } from './dto/reset-password-dto';
 import { Controller, Get, Post, Body, Res } from '@nestjs/common';
-import { RiskAssesmentService } from 'src/lib/risk-assesment.service';
 import { VerificationLink } from 'src/lib/verificationLink.service';
+import { RiskAssesmentService } from 'src/lib/risk-assesment.service';
+import { LocalAuthGuard } from './service/passport/guards/local-auth.guard';
+import { GithubAuthGuard } from './service/passport/guards/github-auth.guard';
+import { GoogleAuthGuard } from './service/passport/guards/google-auth.guard';
+import { GithubStrategy } from './service/passport/strategies/github.strategy';
+import { GoogleStrategy } from './service/passport/strategies/google.strategy';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly githubStrategy: GithubStrategy,
+    private readonly googleStrategy: GoogleStrategy,
     private readonly verificationLink: VerificationLink,
     private readonly speakeasyService: SpeakeasyService,
     private readonly riskAssesmentService: RiskAssesmentService,
@@ -39,6 +46,7 @@ export class AuthController {
     return ip;
   }
 
+  @UseGuards(LocalAuthGuard)
   @Post('login')
   async login(
     @Body() loginDto: LoginDto,
@@ -53,7 +61,6 @@ export class AuthController {
         updatedLoginDto,
         request,
       );
-      console.log(`Threat level: ${threatLevel}`);
       return this.authService.login(updatedLoginDto, response, threatLevel);
     } catch (error) {
       console.error(`Error accesing threat level`);
@@ -91,6 +98,52 @@ export class AuthController {
     const otpauthUrl = await this.speakeasyService.setupTwoFactor(id as string);
     const qrCode = await this.speakeasyService.getQrCodeForUser(id as string);
     return { otpauthUrl, qrCode };
+  }
+
+  @UseGuards(GithubAuthGuard)
+  @Get('login/github')
+  async githubLogin(@Req() request: Request) {
+    return '';
+  }
+  @UseGuards(GithubAuthGuard)
+  @Get('callback/github')
+  async githubCallback(@Req() request: Request, @Res() response: Response) {
+    if (!request.user)
+      return response.redirect(this.githubStrategy.failureRedirect);
+    return response.redirect(this.githubStrategy.successRedirect);
+  }
+
+  @UseGuards(GoogleAuthGuard)
+  @Get('login/google')
+  async GoogleLogin(@Req() request: Request) {
+    return '';
+  }
+
+  @UseGuards(GoogleAuthGuard)
+  @Get('callback/google')
+  async GoogleCallback(@Req() request: Request, @Res() response: Response) {
+    if (!request.user)
+      return response.redirect(this.googleStrategy.failureRedirect);
+    return response.redirect(this.googleStrategy.successRedirect);
+  }
+
+  @Get('successRedirect/:email')
+  async test(
+    @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
+    @Param('email') email: string,
+  ) {
+    try {
+      const ipAddress = this.getIpAddress(request) || '';
+      return this.authService.success(response, email);
+    } catch (error) {
+      console.log(`Error redirecting to success route`);
+    }
+  }
+
+  @Get('failureRedirect')
+  async fail() {
+    return 'failed';
   }
 
   @Post('2fa/verify')

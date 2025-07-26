@@ -20,7 +20,6 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "postinstall": "cp -r custom_libs/geoip-lite/* node_modules/geoip-lite/  && prisma generate --no-engine",
     "prisma:generate": "prisma generate"
-
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -33,6 +32,7 @@
     "@nestjs/throttler": "^6.4.0",
     "@prisma/client": "^6.10.1",
     "@prisma/extension-accelerate": "^2.0.1",
+    "axios": "^1.11.0",
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.0.0",
@@ -41,6 +41,8 @@
     "nodemailer": "^7.0.4",
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
+    "passport-github": "^1.1.0",
+    "passport-google-oauth20": "^2.0.0",
     "passport-local": "^1.0.0",
     "passport-oauth": "^1.0.0",
     "passport-oauth2": "^1.8.0",
@@ -66,6 +68,8 @@
     "@types/node": "^22.10.7",
     "@types/nodemailer": "^6.4.17",
     "@types/passport-facebook": "^3.0.3",
+    "@types/passport-github": "^1.1.12",
+    "@types/passport-google-oauth20": "^2.0.16",
     "@types/passport-local": "^1.0.38",
     "@types/passport-oauth2": "^1.8.0",
     "@types/qrcode": "^1.5.5",

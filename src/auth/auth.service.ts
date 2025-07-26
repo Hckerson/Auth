@@ -13,14 +13,49 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { ResetPasswordDto } from './dto/reset-password-dto';
 import { RiskAssesmentService } from 'src/lib/risk-assesment.service';
 
+type ValidateUserSuccess = {
+  success: true;
+  data: {
+    isValid: boolean;
+    id: string;
+  };
+};
+
+type ValidateUserError = {
+  success: false;
+  error: {
+    message: string;
+    status: number;
+  };
+};
+
+type validateUserResult = ValidateUserSuccess | ValidateUserError;
+
 @Injectable()
 export class AuthService {
+  /**
+   * Service responsible for all authentication logic
+   *        -login, logout
+   *        -signup, session creation and deletion,
+   *        -reset password
+   *        -encryption and decryption of session
+   */
+
+  // secret used to encrypt and decrypt session
   private readonly secret: string;
+  // encodec version of the secret
   private readonly encodedKey: Uint8Array;
+
+  /**
+   * @param mailtrap -Service for sending emails and verification link
+   * @param prisma -Service for interacting with database
+   * @param risk -Risk assessment service for evaluating login threat level
+   * @throws {Error} if cookie secret is not found
+   */
   constructor(
     private mailtrap: Mailtrap,
     private prisma: PrismaService,
-    private risk: RiskAssesmentService
+    private risk: RiskAssesmentService,
   ) {
     this.secret = process.env.COOKIE_SECRET || '';
     if (!this.secret) {
@@ -29,28 +64,26 @@ export class AuthService {
     this.encodedKey = new TextEncoder().encode(this.secret);
   }
 
+  /**
+   * Authenticates a user, creates session and stores secret
+   * @param loginDto -Data object transfer containing password, email etc
+   * @param response -Express response(to set token)
+   * @param threatLevel -Threat level to determine if login would be made
+   * @returns -Resoves an object with a message and an HTTP status code
+   */
   async login(
     loginDto: LoginDto,
     response: Response,
     threatLevel: number,
   ): Promise<{ message: string; status: number }> {
-    //login user and store active session in DB
-
     if (!loginDto.password)
       return { message: `Incomplete credentials`, status: 400 };
-    const { email, password, rememberMe, twoFactorCode } = loginDto;
+    const { email = '', password, rememberMe, twoFactorCode } = loginDto;
 
     try {
-      const userInfo = await this.prisma.user.findUnique({
-        where: {
-          email: email,
-        },
-      });
-      console.log(`Found userInfo ${userInfo}`);
-      if (!userInfo) return { message: `User not found`, status: 400 };
-      const { password: hashedPassword, id } = userInfo;
-      const isValid = await bcrypt.compare(password, hashedPassword);
-      console.log(`Is valid: ${isValid}`);
+      const result = await this.validateUser(email, password);
+      if (!result.success) return result.error;
+      const { isValid, id } = result.data;
       if (isValid) {
         if (rememberMe) {
           // Handle "Remember Me" functionality
@@ -75,7 +108,7 @@ export class AuthService {
           httpOnly: true,
           sameSite: 'lax',
         });
-        this.risk.threatLevel = 0
+        this.risk.threatLevel = 0;
         return { message: 'login successful', status: 200 };
       }
       return { message: 'Invalid credentials', status: 400 };
@@ -85,13 +118,39 @@ export class AuthService {
     return { message: 'error logging in user', status: 400 };
   }
 
-  async storeSession(
-    // store session in database
-    userId: string,
-    rememberToken: string | null = '',
-  ) {
-    console.log(`Storing session`);
-    //save session to database
+  /**
+   * validate user credentials without creating a session
+   * @param email - User email address
+   * @param password -User password
+   * @returns true if valid else false, return an object if not user is found
+   */
+  async validateUser(
+    email: string,
+    password: string,
+  ): Promise<validateUserResult> {
+    const userInfo = await this.prisma.user.findUnique({
+      where: {
+        email: email.toLowerCase(),
+      },
+    });
+
+    if (!userInfo)
+      return {
+        success: false,
+        error: { message: 'User not found', status: 400 },
+      };
+    const { password: hashedPassword, id } = userInfo;
+    const isValid = await bcrypt.compare(password, hashedPassword);
+    return { success: true, data: { isValid, id } };
+  }
+
+  /**
+   *
+   * @param userId -Id of the authenticated user
+   * @param [rememberToken] -Optional remember token
+   * @returns -id of the just created session
+   */
+  async storeSession(userId: string, rememberToken: string | null = '') {
     const { id } = await this.prisma.session.create({
       data: {
         userId,
@@ -104,8 +163,12 @@ export class AuthService {
     return id;
   }
 
+  /**
+   * Sign and encrypt a new jwt payload
+   * @param payload -The jwt payload (contains user id and expiration date, etc)
+   * @returns -The signed and encrypted jwt
+   */
   async encrypt(payload: JWTPayload) {
-    // encrypt payload
     const sessionToken = await new SignJWT(payload)
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
@@ -114,6 +177,11 @@ export class AuthService {
     return sessionToken;
   }
 
+  /**
+   * Decrypt and verify a jwt
+   * @param sessionToken -User session token
+   * @returns -Returns the decrypted payload
+   */
   async decrypt(sessionToken: string | undefined = '') {
     // decrypt payload
     const payload = await jwtVerify(sessionToken, this.encodedKey, {
@@ -122,14 +190,20 @@ export class AuthService {
     return payload;
   }
 
+  /**
+   *
+   * @param signUpDto Data transfer object containing email and password
+   * @param ipAddress -User ip address for ip geolocation
+   * @param request -Express request object to extract header
+   * @returns
+   */
   async signUp(signUpDto: SignUpDto, ipAddress: string, request: Request) {
-    // register user with email and password
     const { email, password } = signUpDto;
-
+    ipAddress = '146.70.99.210';
     //check if user Exists
     const user = await this.prisma.user.findUnique({
       where: {
-        email: email,
+        email: email.toLowerCase(),
       },
     });
 
@@ -150,8 +224,10 @@ export class AuthService {
       try {
         return this.prisma.user.create({
           data: {
-            email,
+            email: email.toLowerCase(),
             password: hashedPassword,
+            provider: 'local',
+            username: email.split('@')[0],
             lastLoginIp: ipAddress,
             lastKnownDevice: hash,
             geoData: {
@@ -175,12 +251,23 @@ export class AuthService {
     }
   }
 
+  /**
+   * Clear user session to logout user
+   * @param response -Express response object to clear cookie
+   * @returns -Returns a success message
+   */
   async logout(response: Response) {
     response.clearCookie('rememberMe');
     response.clearCookie('sessionToken');
     return { message: 'Logout successful' };
   }
 
+  /**
+   * Sending verification email to the user
+   * @param email -Email address of the user
+   * @param verificationLink -Verification link to be sent
+   * @returns Object containing message and status of the response
+   */
   async sendVerificationEmail(email: string, verificationLink: string) {
     //send verification email
     const response = await this.mailtrap.sendEmail({
@@ -203,11 +290,16 @@ export class AuthService {
     return { message: 'Email sent', status: 200 };
   }
 
+  /**
+   *Verify user email using token
+   * @param email -Email address of the user
+   * @param token -Verification token stored earlier on during sign up
+   * @returns -Object containg message and status
+   */
   async verifyEmail(email: string, token: string) {
-    //compareToken
     const user = await this.prisma.user.findUnique({
       where: {
-        email: email,
+        email: email.toLowerCase(),
         verificationToken: token,
       },
       select: {
@@ -219,9 +311,9 @@ export class AuthService {
     const isValid = user.verificationToken == token;
     if (!isValid) return { message: 'Invalid token', status: 400 };
     // verify email
-    return this.prisma.user.update({
+    await this.prisma.user.update({
       where: {
-        email: email,
+        email: email.toLowerCase(),
         verificationToken: token,
       },
       data: {
@@ -229,8 +321,14 @@ export class AuthService {
         emailVerified: true,
       },
     });
+    return { message: 'Email verified', status: 200 };
   }
-
+  /**
+   * Send verification link to reset password
+   * @param email -Email of the user
+   * @param verificationLink -Link to be sent
+   * @returns Object containing message and status
+   */
   async sendResetPasswordLink(email: string, verificationLink: string) {
     // send retset password link
     console.log(`Sending password reset link for ${email}`);
@@ -254,6 +352,33 @@ export class AuthService {
     return { message: 'Email sent', status: 200 };
   }
 
+  async success(response: Response, email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        email: email.toLowerCase(),
+      },
+      select: { id: true },
+    });
+    if (!user) {
+      return { message: 'User not found', status: 400 };
+    }
+    const id = user.id;
+    const sessionId = await this.storeSession(id);
+    const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    const token = await this.encrypt({ id, expiresAt, sessionId });
+    response.cookie('sessionToken', token, {
+      maxAge: 2 * 24 * 60 * 60 * 1000, // 30 days
+      httpOnly: true,
+      sameSite: 'lax',
+    });
+    return { message: 'login successful', status: 200 };
+  }
+
+  /**
+   * Reset user password after validating token
+   * @param resetPasswordDto -Data transfer object containing email, password and token
+   * @returns -Object containing message and status
+   */
   async resetPassword(resetPasswordDto: ResetPasswordDto) {
     const { email, password, token } = resetPasswordDto;
 
@@ -261,7 +386,7 @@ export class AuthService {
     try {
       const person = await this.prisma.user.findUnique({
         where: {
-          email: email,
+          email: email.toLowerCase(),
           verificationToken: token,
         },
         select: {
@@ -289,7 +414,7 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await this.prisma.user.update({
       where: {
-        email: email,
+        email: email.toLowerCase(),
       },
       data: {
         password: hashedPassword,
