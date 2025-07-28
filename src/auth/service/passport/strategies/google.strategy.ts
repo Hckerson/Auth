@@ -18,6 +18,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy) {
   /**
    *
    * @param prisma -Prisma instance for communicating with the database
+   * @param options -Additional options for authentication
    */
   constructor(
     private readonly prisma: PrismaService,
