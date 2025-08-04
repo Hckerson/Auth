@@ -2,7 +2,6 @@ import { LoginDto } from './dto/login-dto';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup-dto';
-import { SkipThrottle } from '@nestjs/throttler';
 import { Param, Req, UseGuards } from '@nestjs/common';
 import { SpeakeasyService } from 'src/lib/speakesy.service';
 import { ResetPasswordDto } from './dto/reset-password-dto';
@@ -173,7 +172,7 @@ export class AuthController {
   ) {
     return await this.authService.verifyEmail(email, token);
   }
-  @SkipThrottle({'normal': false})
+
   @Get('logout')
   logout(@Res({ passthrough: true }) response: Response) {
     return this.authService.logout(response);
