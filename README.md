@@ -53,7 +53,7 @@ If you skip this step, the app may not work as expected.
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone [<repository-url>](https://github.com/Hckerson/Auth.git)
 cd project
 
 # Install dependencies
