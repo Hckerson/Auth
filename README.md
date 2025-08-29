@@ -125,7 +125,6 @@ pnpm run start:debug
 
 Once the application is running, visit:
 
-- **Swagger UI**: `http://localhost:3000/api`
 - **Health Check**: `http://localhost:3000/`
 
 ## 🔌 API Endpoints
