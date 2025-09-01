@@ -1,4 +1,3 @@
-
 import { PrismaClient } from 'generated/prisma';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 

@@ -12,7 +12,7 @@ export class VerificationLink {
     console.log(`Generating verification link for ${email}`);
     this.token = genToken();
     await this.storeVerificationToken(email);
-    return `https://authTekcify.vercel.app/verify?email=${email}&token=${this.token}`;
+    return `http://localhost:3001/verify?email=${email}&token=${this.token}`;
   }
 
   async storeVerificationToken(email: string) {

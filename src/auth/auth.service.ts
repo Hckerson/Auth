@@ -331,6 +331,7 @@ export class AuthService {
    */
   async sendResetPasswordLink(email: string, verificationLink: string) {
     // send retset password link
+    if(!email) return 'Email is required'
     console.log(`Sending password reset link for ${email}`);
     const response = await this.mailtrap.sendEmail({
       to: email,
