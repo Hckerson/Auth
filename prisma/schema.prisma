@@ -36,8 +36,8 @@ model GeoData {
   id       String @id @default(uuid())
   userId   String @unique
   country  String
+  continent String
   region   String
-  timezone String
   city     String
   user     User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }

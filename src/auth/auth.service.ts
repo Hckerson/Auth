@@ -11,6 +11,7 @@ import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 import { Mailtrap } from './service/mailtrap.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ResetPasswordDto } from './dto/reset-password-dto';
+import { fetchLocation } from 'src/lib/services/maximind/ip';
 import { RiskAssesmentService } from 'src/lib/risk-assesment.service';
 
 type ValidateUserSuccess = {
@@ -201,53 +202,56 @@ export class AuthService {
     const { email, password } = signUpDto;
     ipAddress = '146.70.99.210';
     //check if user Exists
-    const user = await this.prisma.user.findUnique({
-      where: {
-        email: email.toLowerCase(),
-      },
-    });
-
-    if (user) return `User already exists`;
-
-    const geo = geoip.lookup(ipAddress);
-    if (geo === null) return 'Error getting geo data';
-    const { region, country, timezone, city }: Lookup = geo;
-
-    const userAgent = request.headers['user-agent'] || '';
-    const acceptLanguage = request.headers['accept-language'] || '';
-    const fingerPrint = `${userAgent}-${acceptLanguage}-${ipAddress}`;
-    const hash = createHash('sha256').update(fingerPrint).digest('hex');
-
-    // create user in database
     try {
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const response = await fetchLocation(ipAddress);
+      const locationData = response.location;
+      const { state_prov, continent_name, country_name, city } = locationData;
+      const user = await this.prisma.user.findUnique({
+        where: {
+          email: email.toLowerCase(),
+        },
+      });
+
+      if (user) return `User already exists`;
+
+      const userAgent = request.headers['user-agent'] || '';
+      const acceptLanguage = request.headers['accept-language'] || '';
+      const fingerPrint = `${userAgent}-${acceptLanguage}-${ipAddress}`;
+      const hash = createHash('sha256').update(fingerPrint).digest('hex');
+
+      // create user in database
       try {
-        return this.prisma.user.create({
-          data: {
-            email: email.toLowerCase(),
-            password: hashedPassword,
-            provider: 'local',
-            username: email.split('@')[0],
-            lastLoginIp: ipAddress,
-            lastKnownDevice: hash,
-            geoData: {
-              create: {
-                region,
-                country,
-                timezone,
-                city,
+        const hashedPassword = await bcrypt.hash(password, 10);
+        try {
+          return this.prisma.user.create({
+            data: {
+              email: email.toLowerCase(),
+              password: hashedPassword,
+              provider: 'local',
+              username: email.split('@')[0],
+              lastLoginIp: ipAddress,
+              lastKnownDevice: hash,
+              geoData: {
+                create: {
+                  region: state_prov,
+                  country: country_name,
+                  continent: continent_name,
+                  city: city,
+                },
               },
             },
-          },
-          include: {
-            geoData: true,
-          },
-        });
+            include: {
+              geoData: true,
+            },
+          });
+        } catch (error) {
+          console.error(`Error creating user in db: ${error}`);
+        }
       } catch (error) {
-        console.error(`Error creating user in db: ${error}`);
+        console.error(`Error signing up: ${error}`);
       }
     } catch (error) {
-      console.error(`Error signing up: ${error}`);
+      console.log(`Error fetching location: ${error}`);
     }
   }
 
@@ -331,7 +335,7 @@ export class AuthService {
    */
   async sendResetPasswordLink(email: string, verificationLink: string) {
     // send retset password link
-    if(!email) return 'Email is required'
+    if (!email) return 'Email is required';
     console.log(`Sending password reset link for ${email}`);
     const response = await this.mailtrap.sendEmail({
       to: email,

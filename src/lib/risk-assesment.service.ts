@@ -1,7 +1,6 @@
 import { Request } from 'express';
 import { createHash } from 'crypto';
-import * as geoip from 'geoip-lite';
-import { Lookup } from 'geoip-lite';
+import { fetchLocation } from './services/maximind/ip';
 import { Injectable } from '@nestjs/common';
 import { LoginDto } from 'src/auth/dto/login-dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -19,11 +18,10 @@ export class RiskAssesmentService {
   }
 
   async geoipAssessment(ipAddress: string, email: string) {
-    const geo = geoip.lookup(ipAddress);
-    if (!geo) return this.threatLevel;
-    const { region, country, timezone, city }: Lookup = geo;
-
     try {
+      const response = await fetchLocation(ipAddress);
+      const locationData = response.location;
+      const { state_prov, continent_name, country_name, city } = locationData;
       const user = await this.prisma.user.findFirst({
         where: {
           email: email,
@@ -40,14 +38,14 @@ export class RiskAssesmentService {
       const {
         country: existingCountry,
         region: existingRegion,
-        timezone: existingTimezone,
+        continent: existingContinent,
         city: existingCity,
       } = existingGeoData;
 
-      if (region !== existingRegion) this.threatLevel += 15;
-      if (country !== existingCountry) this.threatLevel += 15;
-      if (timezone !== existingTimezone) this.threatLevel += 15;
-      if (city !== existingCity) this.threatLevel += 15;
+      if (state_prov !== existingRegion) this.threatLevel += 20;
+      if (country_name !== existingCountry) this.threatLevel += 15;
+      if (continent_name !== existingContinent) this.threatLevel += 25;
+      if (city !== existingCity) this.threatLevel += 10;
       console.log(`Ending geoip assessment`);
       console.log(`Threat level: ${this.threatLevel}`);
       const geoData = user?.geoData;
@@ -60,9 +58,9 @@ export class RiskAssesmentService {
             data: {
               geoData: {
                 update: {
-                  region,
-                  country,
-                  timezone,
+                  region: state_prov,
+                  country: country_name,
+                  continent: continent_name,
                   city,
                 },
               },
@@ -101,7 +99,7 @@ export class RiskAssesmentService {
       if (!user) return;
 
       const { lastKnownDevice, lastLoginIp } = user;
-  
+
       if (lastKnownDevice !== hash) this.threatLevel += 15;
       if (lastLoginIp !== ipAddress) this.threatLevel += 15;
       console.log(`Ending fingerprint accessment for ${email}`);
@@ -119,11 +117,8 @@ export class RiskAssesmentService {
       } catch (error) {
         console.error(`Error updating login deets: ${error}`);
       }
-
     } catch (error) {
       console.error(`Error fetching user login deets: ${error}`);
     }
-
-
   }
 }
