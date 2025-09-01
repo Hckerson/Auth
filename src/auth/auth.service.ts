@@ -200,7 +200,7 @@ export class AuthService {
    */
   async signUp(signUpDto: SignUpDto, ipAddress: string, request: Request) {
     const { email, password } = signUpDto;
-    ipAddress = '146.70.99.210';
+
     //check if user Exists
     try {
       const response = await fetchLocation(ipAddress);
