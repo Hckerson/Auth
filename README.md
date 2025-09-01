@@ -53,7 +53,7 @@ If you skip this step, the app may not work as expected.
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone [<repository-url>](https://github.com/Hckerson/Auth.git)
 cd project
 
 # Install dependencies
@@ -125,7 +125,6 @@ pnpm run start:debug
 
 Once the application is running, visit:
 
-- **Swagger UI**: `http://localhost:3000/api`
 - **Health Check**: `http://localhost:3000/`
 
 ## 🔌 API Endpoints
@@ -272,9 +271,6 @@ mau deploy
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🆘 Support
 
