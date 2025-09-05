@@ -8,7 +8,6 @@ import { SpeakeasyService } from 'src/lib/speakesy.service';
 import { ResetPasswordDto } from './dto/reset-password-dto';
 import { Controller, Get, Post, Body, Res } from '@nestjs/common';
 import { VerificationLink } from 'src/lib/verificationLink.service';
-import { RiskAssesmentService } from 'src/lib/risk-assesment.service';
 import { LocalAuthGuard } from './service/passport/guards/local-auth.guard';
 import { GithubAuthGuard } from './service/passport/guards/github-auth.guard';
 import { GoogleAuthGuard } from './service/passport/guards/google-auth.guard';
@@ -23,24 +22,22 @@ export class AuthController {
     private readonly googleStrategy: GoogleStrategy,
     private readonly verificationLink: VerificationLink,
     private readonly speakeasyService: SpeakeasyService,
-    private readonly riskAssesmentService: RiskAssesmentService,
   ) {}
 
   private getIpAddress(request: Request) {
     // generates ip address and checks for proxy
     let ip =
-      (request.headers['x-forwarded-for'] as string) ||
-      request.socket.remoteAddress ||
-      null;
-
+      (request.headers['X-forwarded-for'] as string) ||
+      request.connection.remoteAddress;
     if (!ip) return;
+
     if (ip.includes(',')) {
       ip = ip.split(',')[0];
     }
-
     if (ip === '::1') {
       ip = '127.0.0.1';
     }
+
     if (ip.startsWith('::ffff:')) {
       ip = ip.substring(7);
     }
@@ -58,11 +55,8 @@ export class AuthController {
     const ipAddress = this.getIpAddress(request);
     const updatedLoginDto = { ...loginDto, ipAddress };
     try {
-      const threatLevel = await this.riskAssesmentService.getThreatLevel(
-        updatedLoginDto,
-        request,
-      );
-      return this.authService.login(updatedLoginDto, response, threatLevel);
+  
+      return this.authService.login(updatedLoginDto, response, request);
     } catch (error) {
       console.error(`Error accesing threat level`);
     }
@@ -173,7 +167,7 @@ export class AuthController {
   ) {
     return await this.authService.verifyEmail(email, token);
   }
-  @SkipThrottle({'normal': false})
+  @SkipThrottle({ normal: false })
   @Get('logout')
   logout(@Res({ passthrough: true }) response: Response) {
     return this.authService.logout(response);

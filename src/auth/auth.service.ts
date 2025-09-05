@@ -75,12 +75,11 @@ export class AuthService {
   async login(
     loginDto: LoginDto,
     response: Response,
-    threatLevel: number,
-  ): Promise<{ message: string; status: number }> {
+    request:Request
+  ){
     if (!loginDto.password)
       return { message: `Incomplete credentials`, status: 400 };
     const { email = '', password, rememberMe, twoFactorCode } = loginDto;
-
     try {
       const result = await this.validateUser(email, password);
       if (!result.success) return result.error;
@@ -97,9 +96,7 @@ export class AuthService {
           await this.storeSession(id, rememberToken);
         }
 
-        if (threatLevel > 55) {
-          return { message: `Threat level too high`, status: 400 };
-        }
+  
 
         const sessionId = await this.storeSession(id);
         const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
@@ -110,6 +107,7 @@ export class AuthService {
           sameSite: 'lax',
         });
         this.risk.threatLevel = 0;
+        const willRequireOtp = await this.risk
         return { message: 'login successful', status: 200 };
       }
       return { message: 'Invalid credentials', status: 400 };
@@ -152,16 +150,16 @@ export class AuthService {
    * @returns -id of the just created session
    */
   async storeSession(userId: string, rememberToken: string | null = '') {
-    const { id } = await this.prisma.session.create({
-      data: {
-        userId,
-        rememberToken,
-      },
-      select: {
-        id: true,
-      },
-    });
-    return id;
+    // const { id } = await this.prisma.session.create({
+    //   data: {
+    //     userId,
+    //     rememberToken,
+    //   },
+    //   select: {
+    //     id: true,
+    //   },
+    // });
+    // return id;
   }
 
   /**
@@ -200,7 +198,7 @@ export class AuthService {
    */
   async signUp(signUpDto: SignUpDto, ipAddress: string, request: Request) {
     const { email, password } = signUpDto;
-
+    ipAddress = '146.70.99.180';
     //check if user Exists
     try {
       const response = await fetchLocation(ipAddress);
@@ -212,43 +210,32 @@ export class AuthService {
         },
       });
 
-      if (user) return `User already exists`;
-
-      const userAgent = request.headers['user-agent'] || '';
-      const acceptLanguage = request.headers['accept-language'] || '';
-      const fingerPrint = `${userAgent}-${acceptLanguage}-${ipAddress}`;
-      const hash = createHash('sha256').update(fingerPrint).digest('hex');
+      if (user)
+        return { success: false, message: 'user already exists', status: 400 };
 
       // create user in database
       try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        try {
-          return this.prisma.user.create({
-            data: {
-              email: email.toLowerCase(),
-              password: hashedPassword,
-              provider: 'local',
-              username: email.split('@')[0],
-              lastLoginIp: ipAddress,
-              lastKnownDevice: hash,
-              geoData: {
-                create: {
-                  region: state_prov,
-                  country: country_name,
-                  continent: continent_name,
-                  city: city,
-                },
+        await this.prisma.user.create({
+          data: {
+            email: email.toLowerCase(),
+            password: hashedPassword,
+            provider: 'local',
+            username: email.split('@')[0],
+            geoData: {
+              create: {
+                region: state_prov,
+                country: country_name,
+                continent: continent_name,
+                city: city,
               },
             },
-            include: {
-              geoData: true,
-            },
-          });
-        } catch (error) {
-          console.error(`Error creating user in db: ${error}`);
-        }
+          },
+        });
+        return { success: true, message: 'Signup successful', status: 200 };
       } catch (error) {
         console.error(`Error signing up: ${error}`);
+        return { success: true, message: 'Signup successful', status: 200 };
       }
     } catch (error) {
       console.log(`Error fetching location: ${error}`);
@@ -301,31 +288,31 @@ export class AuthService {
    * @returns -Object containg message and status
    */
   async verifyEmail(email: string, token: string) {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        email: email.toLowerCase(),
-        verificationToken: token,
-      },
-      select: {
-        verificationToken: true,
-      },
-    });
-    if (!user?.verificationToken)
-      return { message: 'Token not found', status: 400 };
-    const isValid = user.verificationToken == token;
-    if (!isValid) return { message: 'Invalid token', status: 400 };
-    // verify email
-    await this.prisma.user.update({
-      where: {
-        email: email.toLowerCase(),
-        verificationToken: token,
-      },
-      data: {
-        verificationToken: null,
-        emailVerified: true,
-      },
-    });
-    return { message: 'Email verified', status: 200 };
+    // const user = await this.prisma.user.findUnique({
+    //   where: {
+    //     email: email.toLowerCase(),
+    //     verificationToken: token,
+    //   },
+    //   select: {
+    //     verificationToken: true,
+    //   },
+    // });
+    // if (!user?.verificationToken)
+    //   return { message: 'Token not found', status: 400 };
+    // const isValid = user.verificationToken == token;
+    // if (!isValid) return { message: 'Invalid token', status: 400 };
+    // // verify email
+    // await this.prisma.user.update({
+    //   where: {
+    //     email: email.toLowerCase(),
+    //     verificationToken: token,
+    //   },
+    //   data: {
+    //     verificationToken: null,
+    //     emailVerified: true,
+    //   },
+    // });
+    // return { message: 'Email verified', status: 200 };
   }
   /**
    * Send verification link to reset password
@@ -388,32 +375,32 @@ export class AuthService {
     const { email, password, token } = resetPasswordDto;
 
     //veify token
-    try {
-      const person = await this.prisma.user.findUnique({
-        where: {
-          email: email.toLowerCase(),
-          verificationToken: token,
-        },
-        select: {
-          verificationToken: true,
-          updatedAt: true,
-        },
-      });
+    // try {
+    //   const person = await this.prisma.user.findUnique({
+    //     where: {
+    //       email: email.toLowerCase(),
+    //       verificationToken: token,
+    //     },
+    //     select: {
+    //       verificationToken: true,
+    //       updatedAt: true,
+    //     },
+    //   });
 
-      if (!person?.verificationToken) {
-        return { message: 'Token not found', status: 400 };
-      }
+    //   if (!person?.verificationToken) {
+    //     return { message: 'Token not found', status: 400 };
+    //   }
 
-      if (person?.verificationToken !== token) {
-        return { message: 'Invalid token', status: 400 };
-      }
+    //   if (person?.verificationToken !== token) {
+    //     return { message: 'Invalid token', status: 400 };
+    //   }
 
-      if (person?.updatedAt.getTime() + 300000 < Date.now()) {
-        return { message: 'Token expired', status: 400 };
-      }
-    } catch (error) {
-      console.error(`Error fetchig user: ${error}`);
-    }
+    //   if (person?.updatedAt.getTime() + 300000 < Date.now()) {
+    //     return { message: 'Token expired', status: 400 };
+    //   }
+    // } catch (error) {
+    //   console.error(`Error fetchig user: ${error}`);
+    // }
 
     // reset password
     const hashedPassword = await bcrypt.hash(password, 10);

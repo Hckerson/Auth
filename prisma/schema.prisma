@@ -14,39 +14,57 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum VerificationType {
+  PASSWORD_RESET
+  VERIFY_EMAIL
+  CHANGE_EMAIL
+}
+
 model User {
-  id                String    @id @default(uuid())
-  email             String    @unique
+  id                String              @id @default(uuid())
+  email             String              @unique
   password          String
-  username          String    @default("")
-  provider          String    @default("")
-  emailVerified     Boolean   @default(false)
-  createdAt         DateTime  @default(now())
-  twofaVerified     Boolean   @default(false)
-  updatedAt         DateTime  @updatedAt
-  verificationToken String?
   speakeasySecret   String?
-  lastLoginIp       String?
-  lastKnownDevice   String?
+  username          String              @default("")
+  provider          String              @default("")
+  emailVerified     Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  twoFactorSetup    Boolean             @default(false)
   sessions          Session[]
+  verificationCodes VerificationCodes[]
   geoData           GeoData?
 }
 
 model GeoData {
-  id       String @id @default(uuid())
-  userId   String @unique
-  country  String
+  id        String @id @default(uuid())
+  userId    String @unique
+  country   String
   continent String
-  region   String
-  city     String
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  region    String
+  city      String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model Session {
   id            String   @id @default(uuid())
   userId        String
+  uaString      String
+  devicePrint   String
   rememberToken String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model VerificationCodes {
+  id         String           @id @default(uuid())
+  user       User             @relation(fields: [userId], references: [id])
+  code       String
+  type       VerificationType
+  userId     String
+  createdAt  DateTime         @default(now())
+  expiresAt  DateTime
+  verifiedAt DateTime
+  codeUsed   Boolean          @default(false)
 }

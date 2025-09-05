@@ -18,13 +18,13 @@ export class VerificationLink {
   async storeVerificationToken(email: string) {
     // function to store verification token in database
     console.log(`Storing verification link`)
-    const user = await this.prisma.user.update({
-      where: {
-        email: email.toLowerCase(),
-      },
-      data: {
-        verificationToken: this.token as string,
-      },
-    });
+    // const user = await this.prisma.user.update({
+    //   where: {
+    //     email: email.toLowerCase(),
+    //   },
+    //   data: {
+    //     verificationToken: this.token as string,
+    //   },
+    // });
   }
 }

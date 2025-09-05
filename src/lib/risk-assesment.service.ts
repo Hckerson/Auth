@@ -13,7 +13,7 @@ export class RiskAssesmentService {
     //get threat level
     const { ipAddress = '', email = '' } = loginDto;
     await this.geoipAssessment(ipAddress, email);
-    await this.fingerprintingAccessment(request, email, ipAddress);
+    await this.fingerprintingAccessment(request, ipAddress);
     return this.threatLevel;
   }
 
@@ -28,95 +28,62 @@ export class RiskAssesmentService {
         },
         select: {
           geoData: true,
+          sessions: true,
         },
       });
-      console.log(`Found user ${user?.geoData}`);
-
       if (!user?.geoData) return this.threatLevel;
+      if (!user?.sessions) return this.threatLevel;
 
-      const existingGeoData = user?.geoData;
-      const {
-        country: existingCountry,
-        region: existingRegion,
-        continent: existingContinent,
-        city: existingCity,
-      } = existingGeoData;
+      const sameProvince = state_prov == user.geoData.region;
+      const sameCountry = country_name == user.geoData.country;
+      const sameContinent = continent_name == user.geoData.continent;
+      const sameCity = city == user.geoData.city;
 
-      if (state_prov !== existingRegion) this.threatLevel += 20;
-      if (country_name !== existingCountry) this.threatLevel += 15;
-      if (continent_name !== existingContinent) this.threatLevel += 25;
-      if (city !== existingCity) this.threatLevel += 10;
-      console.log(`Ending geoip assessment`);
-      console.log(`Threat level: ${this.threatLevel}`);
-      const geoData = user?.geoData;
-      if (!geoData) {
-        try {
-          await this.prisma.user.update({
-            where: {
-              email: email.toLowerCase(),
-            },
-            data: {
-              geoData: {
-                update: {
-                  region: state_prov,
-                  country: country_name,
-                  continent: continent_name,
-                  city,
-                },
-              },
-            },
-          });
-        } catch (error) {
-          console.error(`Error updating geo data: ${error}`);
-        }
-      }
-    } catch (error) {
-      console.error(`Error finding geo data: ${error}`);
-    }
-  }
-
-  async fingerprintingAccessment(
-    request: Request,
-    email: string,
-    ipAddress: string,
-  ) {
-    //get device fingerPrint
-    console.log(`Starting fingerprint accessment for ${email}`);
-    const userAgent = request.headers['user-agent'] || '';
-    const acceptLanguage = request.headers['accept-language'] || '';
-    const fingerPrint = `${userAgent}-${acceptLanguage}-${ipAddress}`;
-    const hash = createHash('sha256').update(fingerPrint).digest('hex');
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: {
-          email: email,
-        },
-        select: {
-          lastKnownDevice: true,
-          lastLoginIp: true,
-        },
-      });
-      if (!user) return;
-
-      const { lastKnownDevice, lastLoginIp } = user;
-
-      if (lastKnownDevice !== hash) this.threatLevel += 15;
-      if (lastLoginIp !== ipAddress) this.threatLevel += 15;
-      console.log(`Ending fingerprint accessment for ${email}`);
-      console.log(`Threat level: ${this.threatLevel}`);
+      if (!sameCity) this.threatLevel += 10;
+      if (!sameProvince) this.threatLevel += 15;
+      if (!sameCountry) this.threatLevel += 20;
+      if (!sameContinent) this.threatLevel += 25;
       try {
         await this.prisma.user.update({
           where: {
             email: email.toLowerCase(),
           },
           data: {
-            lastKnownDevice: hash,
-            lastLoginIp: ipAddress,
+            geoData: {
+              update: {
+                region: state_prov,
+                country: country_name,
+                continent: continent_name,
+                city,
+              },
+            },
           },
         });
       } catch (error) {
-        console.error(`Error updating login deets: ${error}`);
+        console.error(`Error updating geo data: ${error}`);
       }
+    } catch (error) {
+      console.error(`Error finding geo data: ${error}`);
+    }
+  }
+
+  async fingerprintingAccessment(request: Request, ipAddress: string) {
+    const userAgent = request.headers['user-agent'] || '';
+    const acceptLanguage = request.headers['accept-language'] || '';
+    const fingerPrint = `${userAgent}-${acceptLanguage}-${ipAddress}`;
+    const hash = createHash('sha256').update(fingerPrint).digest('hex');
+
+    try {
+      const sessions = await this.prisma.session.findFirst({
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+      if (!sessions) return this.threatLevel;
+      const { uaString, devicePrint } = sessions;
+      if (uaString != userAgent || devicePrint != hash) {
+        this.threatLevel += 20;
+      } 
     } catch (error) {
       console.error(`Error fetching user login deets: ${error}`);
     }

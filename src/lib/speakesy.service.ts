@@ -65,13 +65,13 @@ export class SpeakeasyService {
   }
 
   async update2faStatus(userId: string) {
-    const user = await this.prisma.user.update({
-      where: {
-        id: userId,
-      },
-      data: {
-        twofaVerified: true,
-      },
-    });
+    // const user = await this.prisma.user.update({
+    //   where: {
+    //     id: userId,
+    //   },
+    //   data: {
+    //     twofaVerified: true,
+    //   },
+    // });
   }
 }
