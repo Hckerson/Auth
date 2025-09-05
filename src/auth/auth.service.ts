@@ -14,24 +14,6 @@ import { ResetPasswordDto } from './dto/reset-password-dto';
 import { fetchLocation } from 'src/lib/services/maximind/ip';
 import { RiskAssesmentService } from 'src/lib/risk-assesment.service';
 
-type ValidateUserSuccess = {
-  success: true;
-  data: {
-    isValid: boolean;
-    id: string;
-  };
-};
-
-type ValidateUserError = {
-  success: false;
-  error: {
-    message: string;
-    status: number;
-  };
-};
-
-type validateUserResult = ValidateUserSuccess | ValidateUserError;
-
 @Injectable()
 export class AuthService {
   /**
@@ -72,49 +54,67 @@ export class AuthService {
    * @param threatLevel -Threat level to determine if login would be made
    * @returns -Resoves an object with a message and an HTTP status code
    */
-  async login(
-    loginDto: LoginDto,
-    response: Response,
-    request:Request
-  ){
-    if (!loginDto.password)
-      return { message: `Incomplete credentials`, status: 400 };
-    const { email = '', password, rememberMe, twoFactorCode } = loginDto;
+  async login(loginDto: LoginDto, response: Response, request: Request) {
+    const MAX_AGE_REMEMBER = 30 * 24 * 60 * 60 * 1000;
+    const MAX_AGE = 2 * 24 * 60 * 60 * 1000;
+
+    if (!loginDto.password || !loginDto.email)
+      return { success: false, message: 'incomplete credentials', status };
+    const { email = '', password, rememberMe } = loginDto;
     try {
       const result = await this.validateUser(email, password);
-      if (!result.success) return result.error;
+      if (!result) return;
       const { isValid, id } = result.data;
       if (isValid) {
+        const userAgent = request.headers['user-agent'] || '';
+        const acceptLanguage = request.headers['accept-language'] || '';
+        const fingerPrint = `${userAgent}-${acceptLanguage}`;
+        const hash = createHash('sha256').update(fingerPrint).digest('hex');
         if (rememberMe) {
           // Handle "Remember Me" functionality
           const rememberToken = randomBytes(32).toString('hex');
-          response.cookie('rememberMe', rememberToken, {
-            maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-            httpOnly: true,
-            sameSite: 'lax',
-          });
-          await this.storeSession(id, rememberToken);
+          await this.setCookie(
+            response,
+            MAX_AGE_REMEMBER,
+            'rememberMe',
+            rememberToken,
+          );
+          await this.storeSession(id, userAgent, fingerPrint, rememberToken);
+          return { success: true, message: 'login successful', status: 200 };
+        } else {
+          const sessionId = await this.storeSession(id, userAgent, fingerPrint);
+          const expiresAt = new Date(Date.now() + MAX_AGE);
+          const token = await this.encrypt({ id, expiresAt, sessionId });
+
+          const willRequireOtp =
+            (await this.risk.riskLevel(loginDto, request)) > 55;
+          if (willRequireOtp)
+            return { success: false, message: 'OTP required', status: 401 };
+
+          await this.setCookie(response, MAX_AGE, 'session', token);
+          this.risk.threatLevel = 0;
+
+          return { success: true, message: 'login successful', status: 200 };
         }
-
-  
-
-        const sessionId = await this.storeSession(id);
-        const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
-        const token = await this.encrypt({ id, expiresAt, sessionId });
-        response.cookie('sessionToken', token, {
-          maxAge: 2 * 24 * 60 * 60 * 1000, // 30 days
-          httpOnly: true,
-          sameSite: 'lax',
-        });
-        this.risk.threatLevel = 0;
-        const willRequireOtp = await this.risk
-        return { message: 'login successful', status: 200 };
       }
-      return { message: 'Invalid credentials', status: 400 };
+      return { success: false, message: 'Invalid credential', status: 400 };
     } catch (error) {
       console.error(`Error finding user in db`);
+      return { success: false, message: 'error validating user', status: 500 };
     }
-    return { message: 'error logging in user', status: 400 };
+  }
+
+  async setCookie(
+    response: Response,
+    age: number,
+    name: string,
+    token: string,
+  ) {
+    response.cookie(name, token, {
+      maxAge: age, // 30 days
+      httpOnly: true,
+      sameSite: 'lax',
+    });
   }
 
   /**
@@ -123,21 +123,15 @@ export class AuthService {
    * @param password -User password
    * @returns true if valid else false, return an object if not user is found
    */
-  async validateUser(
-    email: string,
-    password: string,
-  ): Promise<validateUserResult> {
+  async validateUser(email: string, password: string) {
     const userInfo = await this.prisma.user.findUnique({
       where: {
         email: email.toLowerCase(),
       },
     });
 
-    if (!userInfo)
-      return {
-        success: false,
-        error: { message: 'User not found', status: 400 },
-      };
+    if (!userInfo) return;
+
     const { password: hashedPassword, id } = userInfo;
     const isValid = await bcrypt.compare(password, hashedPassword);
     return { success: true, data: { isValid, id } };
@@ -149,17 +143,24 @@ export class AuthService {
    * @param [rememberToken] -Optional remember token
    * @returns -id of the just created session
    */
-  async storeSession(userId: string, rememberToken: string | null = '') {
-    // const { id } = await this.prisma.session.create({
-    //   data: {
-    //     userId,
-    //     rememberToken,
-    //   },
-    //   select: {
-    //     id: true,
-    //   },
-    // });
-    // return id;
+  async storeSession(
+    userId: string,
+    uaString?: string,
+    devicePrint?: string,
+    rememberToken?: string,
+  ) {
+    const { id } = await this.prisma.session.create({
+      data: {
+        userId,
+        uaString ,
+        devicePrint,
+        rememberToken,
+      },
+      select: {
+        id: true,
+      },
+    });
+    return id;
   }
 
   /**
@@ -232,13 +233,14 @@ export class AuthService {
             },
           },
         });
-        return { success: true, message: 'Signup successful', status: 200 };
+        return { success: true, message: 'signup successful', status: 200 };
       } catch (error) {
         console.error(`Error signing up: ${error}`);
-        return { success: true, message: 'Signup successful', status: 200 };
+        return { success: false, message: 'signup failed', status: 200 };
       }
     } catch (error) {
-      console.log(`Error fetching location: ${error}`);
+      console.log(`Error checking user existence: ${error}`);
+      return { success: false, message: 'fetch failed', status: 400 };
     }
   }
 

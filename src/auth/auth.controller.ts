@@ -51,11 +51,9 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request,
   ) {
-    if (!loginDto) return `No loginDto passed`;
     const ipAddress = this.getIpAddress(request);
     const updatedLoginDto = { ...loginDto, ipAddress };
     try {
-  
       return this.authService.login(updatedLoginDto, response, request);
     } catch (error) {
       console.error(`Error accesing threat level`);

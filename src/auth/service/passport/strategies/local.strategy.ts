@@ -10,8 +10,7 @@ import { PassportStrategy, AuthModuleOptions } from '@nestjs/passport';
  * 
  */
 export class LocalStrategy extends PassportStrategy(Strategy) {
-  public successRedirect: string
-  public failureRedirect: string
+
 
   /**
    * Constructs a new instance of local strategy
@@ -24,8 +23,6 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
   ) {
     /**Configures passport to use email instead of the default username field */
     super({ usernameField: 'email' });
-    this.successRedirect = this.options['successdirect'] || '/';
-    this.failureRedirect = this.options['failureRedirect'] || '/login';
   }
 
 
@@ -38,7 +35,7 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
    */
   async validate(username: string, password: string) {
     const result = await this.authService.validateUser(username, password);
-    if (!result.success) {
+    if (!result || result == null || result == undefined) {
       throw new UnauthorizedException('User not found');
     }
     const data = result.data;

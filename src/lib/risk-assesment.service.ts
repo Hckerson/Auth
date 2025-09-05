@@ -4,16 +4,18 @@ import { fetchLocation } from './services/maximind/ip';
 import { Injectable } from '@nestjs/common';
 import { LoginDto } from 'src/auth/dto/login-dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+
 @Injectable()
 export class RiskAssesmentService {
   threatLevel: number = 0;
   constructor(private readonly prisma: PrismaService) {}
 
-  async getThreatLevel(loginDto: LoginDto, request: Request) {
+  async riskLevel(loginDto: LoginDto, request: Request) {
     //get threat level
-    const { ipAddress = '', email = '' } = loginDto;
+    const { email = '' } = loginDto;
+    const ipAddress = '146.70.99.180';
     await this.geoipAssessment(ipAddress, email);
-    await this.fingerprintingAccessment(request, ipAddress);
+    await this.fingerprintingAccessment(request, email);
     return this.threatLevel;
   }
 
@@ -31,6 +33,7 @@ export class RiskAssesmentService {
           sessions: true,
         },
       });
+      
       if (!user?.geoData) return this.threatLevel;
       if (!user?.sessions) return this.threatLevel;
 
@@ -67,23 +70,32 @@ export class RiskAssesmentService {
     }
   }
 
-  async fingerprintingAccessment(request: Request, ipAddress: string) {
+  async fingerprintingAccessment(request: Request, email: string) {
     const userAgent = request.headers['user-agent'] || '';
     const acceptLanguage = request.headers['accept-language'] || '';
-    const fingerPrint = `${userAgent}-${acceptLanguage}-${ipAddress}`;
+    const fingerPrint = `${userAgent}-${acceptLanguage}`;
     const hash = createHash('sha256').update(fingerPrint).digest('hex');
 
     try {
       const sessions = await this.prisma.session.findFirst({
+        where: {
+          user: {
+            email: email,
+          },
+        },
         orderBy: {
           createdAt: 'desc',
+        },
+        select: {
+          uaString: true,
+          devicePrint: true,
         },
       });
       if (!sessions) return this.threatLevel;
       const { uaString, devicePrint } = sessions;
       if (uaString != userAgent || devicePrint != hash) {
         this.threatLevel += 20;
-      } 
+      }
     } catch (error) {
       console.error(`Error fetching user login deets: ${error}`);
     }
