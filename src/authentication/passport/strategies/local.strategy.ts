@@ -1,5 +1,5 @@
 import { Strategy } from 'passport-local';
-import { AuthService } from 'src/auth/auth.service';
+import { AuthService } from 'src/models/auth/auth.service';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy, AuthModuleOptions } from '@nestjs/passport';
 
@@ -7,11 +7,9 @@ import { PassportStrategy, AuthModuleOptions } from '@nestjs/passport';
 /**
  * LocalStrategy is a passport strategy that is used to authenticate a user with a username and password.
  * @see https://docs.nestjs.com/security/authentication
- * 
+ *
  */
 export class LocalStrategy extends PassportStrategy(Strategy) {
-
-
   /**
    * Constructs a new instance of local strategy
    * @param authService -Service for authenticating users
@@ -25,12 +23,11 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
     super({ usernameField: 'email' });
   }
 
-
   /**
    * Validates user using username and password and returns user data
    * @param username -User username
    * @param password -User pasword
-   * @returns  -returns user data if authentication is successful 
+   * @returns  -returns user data if authentication is successful
    * @throws unathorized exception if user is not found
    */
   async validate(username: string, password: string) {
@@ -39,10 +36,8 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found');
     }
     const data = result.data;
-    const {isValid} = data
-    if(!isValid) throw new UnauthorizedException('Invalid credentials');
+    const { isValid } = data;
+    if (!isValid) throw new UnauthorizedException('Invalid credentials');
     return data;
   }
-
-  
 }

@@ -8,11 +8,11 @@ import { SpeakeasyService } from 'src/lib/speakesy.service';
 import { ResetPasswordDto } from './dto/reset-password-dto';
 import { Controller, Get, Post, Body, Res } from '@nestjs/common';
 import { VerificationLink } from 'src/lib/verificationLink.service';
-import { LocalAuthGuard } from './service/passport/guards/local-auth.guard';
-import { GithubAuthGuard } from './service/passport/guards/github-auth.guard';
-import { GoogleAuthGuard } from './service/passport/guards/google-auth.guard';
-import { GithubStrategy } from './service/passport/strategies/github.strategy';
-import { GoogleStrategy } from './service/passport/strategies/google.strategy';
+import { LocalAuthGuard } from '../../authentication/passport/guards/local-auth.guard';
+import { GithubAuthGuard } from '../../authentication/passport/guards/github-auth.guard';
+import { GoogleAuthGuard } from '../../authentication/passport/guards/google-auth.guard';
+import { GithubStrategy } from '../../authentication/passport/strategies/github.strategy';
+import { GoogleStrategy } from '../../authentication/passport/strategies/google.strategy';
 
 @Controller('auth')
 export class AuthController {

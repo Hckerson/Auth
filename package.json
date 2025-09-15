@@ -40,9 +40,11 @@
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.0.0",
     "geoip-lite": "^1.4.10",
+    "install": "^0.13.0",
     "ip-geolocation-api-sdk-typescript": "^2.0.0",
     "jose": "^6.0.11",
     "nodemailer": "^7.0.4",
+    "npm": "^11.6.0",
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
     "passport-github": "^1.1.0",
@@ -55,7 +57,8 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "speakeasy": "^2.0.0",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "tekcify-auth": "^0.1.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

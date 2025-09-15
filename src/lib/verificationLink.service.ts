@@ -1,4 +1,4 @@
-import { genToken } from './gen-token';
+import { randomToken } from './utils';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 
@@ -10,7 +10,7 @@ export class VerificationLink {
   async generateVerificationLink(email: string) {
     // generate verification link and store in database
     console.log(`Generating verification link for ${email}`);
-    this.token = genToken();
+    this.token = randomToken();
     await this.storeVerificationToken(email);
     return `http://localhost:3001/verify?email=${email}&token=${this.token}`;
   }

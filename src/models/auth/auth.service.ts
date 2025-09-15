@@ -1,14 +1,12 @@
 import * as bcrypt from 'bcryptjs';
 import { createHash } from 'crypto';
-import * as geoip from 'geoip-lite';
-import { Lookup } from 'geoip-lite';
 import { randomBytes } from 'node:crypto';
 import { LoginDto } from './dto/login-dto';
 import { Request, Response } from 'express';
 import { Injectable } from '@nestjs/common';
 import { SignUpDto } from './dto/signup-dto';
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
-import { Mailtrap } from './service/mailtrap.service';
+import { Mailtrap } from '../../lib/services/nodemailer/mailtrap.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ResetPasswordDto } from './dto/reset-password-dto';
 import { fetchLocation } from 'src/lib/services/maximind/ip';
@@ -152,7 +150,7 @@ export class AuthService {
     const { id } = await this.prisma.session.create({
       data: {
         userId,
-        uaString ,
+        uaString,
         devicePrint,
         rememberToken,
       },

@@ -1,8 +1,8 @@
 import { Request } from 'express';
 import { createHash } from 'crypto';
-import { fetchLocation } from './services/maximind/ip';
 import { Injectable } from '@nestjs/common';
-import { LoginDto } from 'src/auth/dto/login-dto';
+import { fetchLocation } from './services/maximind/ip';
+import { LoginDto } from 'src/models/auth/dto/login-dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
