@@ -24,25 +24,6 @@ export class AuthController {
     private readonly speakeasyService: SpeakeasyService,
   ) {}
 
-  private getIpAddress(request: Request) {
-    // generates ip address and checks for proxy
-    let ip =
-      (request.headers['X-forwarded-for'] as string) ||
-      request.connection.remoteAddress;
-    if (!ip) return;
-
-    if (ip.includes(',')) {
-      ip = ip.split(',')[0];
-    }
-    if (ip === '::1') {
-      ip = '127.0.0.1';
-    }
-
-    if (ip.startsWith('::ffff:')) {
-      ip = ip.substring(7);
-    }
-    return ip;
-  }
 
   @UseGuards(LocalAuthGuard)
   @Post('login')
@@ -51,10 +32,8 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request,
   ) {
-    const ipAddress = this.getIpAddress(request);
-    const updatedLoginDto = { ...loginDto, ipAddress };
     try {
-      return this.authService.login(updatedLoginDto, response, request);
+      return this.authService.login(loginDto, response, request);
     } catch (error) {
       console.error(`Error accesing threat level`);
     }
@@ -62,9 +41,9 @@ export class AuthController {
 
   @Post('signup')
   async signup(@Body() signUpDto: SignUpDto, @Req() request: Request) {
-    const ipAddress = this.getIpAddress(request) || '';
-    return this.authService.signUp(signUpDto, ipAddress, request);
+    return this.authService.signUp(signUpDto,  request);
   }
+
 
   @Post('reset-password')
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
@@ -121,13 +100,12 @@ export class AuthController {
   }
 
   @Get('successRedirect/:email')
-  async test(
+  async emailRedirect(
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request,
     @Param('email') email: string,
   ) {
     try {
-      const ipAddress = this.getIpAddress(request) || '';
       return this.authService.success(response, email);
     } catch (error) {
       console.log(`Error redirecting to success route`);
@@ -137,6 +115,11 @@ export class AuthController {
   @Get('failureRedirect')
   async fail() {
     return 'failed';
+  }
+
+  @Get('test')
+  test(@Req() request: Request){
+    console.log(request.cookies['session'])
   }
 
   @Post('2fa/verify')

@@ -1,16 +1,13 @@
 import * as bcrypt from 'bcryptjs';
-import { createHash } from 'crypto';
 import { randomBytes } from 'node:crypto';
 import { LoginDto } from './dto/login-dto';
 import { Request, Response } from 'express';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { SignUpDto } from './dto/signup-dto';
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
-import { Mailtrap } from '../../lib/services/nodemailer/mailtrap.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ResetPasswordDto } from './dto/reset-password-dto';
-import { fetchLocation } from 'src/lib/services/maximind/ip';
-import { RiskAssesmentService } from 'src/lib/risk-assesment.service';
+import { Mailtrap } from '../../lib/services/nodemailer/mailtrap.service';
 
 @Injectable()
 export class AuthService {
@@ -26,6 +23,8 @@ export class AuthService {
   private readonly secret: string;
   // encodec version of the secret
   private readonly encodedKey: Uint8Array;
+  // logger
+  private readonly logger: Logger;
 
   /**
    * @param mailtrap -Service for sending emails and verification link
@@ -36,40 +35,114 @@ export class AuthService {
   constructor(
     private mailtrap: Mailtrap,
     private prisma: PrismaService,
-    private risk: RiskAssesmentService,
   ) {
     this.secret = process.env.COOKIE_SECRET || '';
     if (!this.secret) {
       throw new Error('Cookie secret not found');
     }
     this.encodedKey = new TextEncoder().encode(this.secret);
+    this.logger = new Logger(AuthService.name, { timestamp: true });
+  }
+
+  /**
+   *
+   * @param signUpDto Data transfer object containing email and password
+   * @param ipAddress -User ip address for ip geolocation
+   * @param request -Express request object to extract header
+   * @returns
+   */
+  async signUp(signUpDto: SignUpDto, request: Request) {
+    const { email, password } = signUpDto;
+
+    if (!email || !password) {
+      this.logger.error(`Email or password not provided`);
+      return {
+        success: false,
+        message: 'email or password not provided',
+        status: 400,
+      };
+    }
+    //check if user Exists
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: {
+          email: email.toLowerCase(),
+        },
+      });
+
+      // return response immediately if user exist
+      if (user) {
+        this.logger.log(`User already exists`);
+        return { success: false, message: 'user already exists', status: 400 };
+      }
+
+      this.logger.log(`User does not exist, creating new user`);
+
+      // create user in database
+      try {
+        this.logger.log(`Creating new user in database`);
+        const hashedPassword = await bcrypt.hash(password, 10);
+        await this.prisma.user.create({
+          data: {
+            email: email.toLowerCase(),
+            password: hashedPassword,
+            provider: 'local',
+            username: email.split('@')[0],
+          },
+        });
+        return { success: true, message: 'signup successful', status: 200 };
+      } catch (error) {
+        this.logger.error(`Error signing up: ${error}`);
+        return { success: false, message: 'signup failed', status: 200 };
+      }
+    } catch (error) {
+      this.logger.log(`Error checking user existence: ${error}`);
+      return { success: false, message: 'fetch failed', status: 400 };
+    }
   }
 
   /**
    * Authenticates a user, creates session and stores secret
-   * @param loginDto -Data object transfer containing password, email etc
    * @param response -Express response(to set token)
-   * @param threatLevel -Threat level to determine if login would be made
+   * @param loginDto -Data object transfer containing password, email etc
    * @returns -Resoves an object with a message and an HTTP status code
    */
   async login(loginDto: LoginDto, response: Response, request: Request) {
     const MAX_AGE_REMEMBER = 30 * 24 * 60 * 60 * 1000;
-    const MAX_AGE = 2 * 24 * 60 * 60 * 1000;
+    const MAX_AGE = 1 * 24 * 60 * 60 * 1000;
 
     if (!loginDto.password || !loginDto.email)
       return { success: false, message: 'incomplete credentials', status };
+
+    // destructuring loginDTO
     const { email = '', password, rememberMe } = loginDto;
+
     try {
+      // call the validateUser function
       const result = await this.validateUser(email, password);
-      if (!result) return;
-      const { isValid, id } = result.data;
+
+      // check if result contains the data payload
+      if (!result?.data) {
+        if (result?.message == 'user not found') {
+          return { success: false, message: 'user not found', status: 400 };
+        } else if (result?.message == 'Invalid credentials') {
+          return {
+            success: false,
+            message: 'invalid credentials',
+            status: 400,
+          };
+        }
+      }
+      const { isValid, id } = result?.data as { isValid: boolean; id: string };
+      // process login if user validation was successfull
       if (isValid) {
         const userAgent = request.headers['user-agent'] || '';
         const acceptLanguage = request.headers['accept-language'] || '';
         const fingerPrint = `${userAgent}-${acceptLanguage}`;
-        const hash = createHash('sha256').update(fingerPrint).digest('hex');
+
         if (rememberMe) {
           // Handle "Remember Me" functionality
+          this.logger.log(`Handling "Remember Me" functionality`);
           const rememberToken = randomBytes(32).toString('hex');
           await this.setCookie(
             response,
@@ -77,20 +150,18 @@ export class AuthService {
             'rememberMe',
             rememberToken,
           );
+          // store session in database
           await this.storeSession(id, userAgent, fingerPrint, rememberToken);
           return { success: true, message: 'login successful', status: 200 };
         } else {
+          this.logger.log(
+            `Processing user without "Remember Me" functionality`,
+          );
           const sessionId = await this.storeSession(id, userAgent, fingerPrint);
           const expiresAt = new Date(Date.now() + MAX_AGE);
           const token = await this.encrypt({ id, expiresAt, sessionId });
 
-          const willRequireOtp =
-            (await this.risk.riskLevel(loginDto, request)) > 55;
-          if (willRequireOtp)
-            return { success: false, message: 'OTP required', status: 401 };
-
           await this.setCookie(response, MAX_AGE, 'session', token);
-          this.risk.threatLevel = 0;
 
           return { success: true, message: 'login successful', status: 200 };
         }
@@ -102,6 +173,7 @@ export class AuthService {
     }
   }
 
+  // helper function for setting cookies
   async setCookie(
     response: Response,
     age: number,
@@ -109,30 +181,45 @@ export class AuthService {
     token: string,
   ) {
     response.cookie(name, token, {
-      maxAge: age, // 30 days
+      maxAge: age,
       httpOnly: true,
-      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
     });
   }
 
   /**
    * validate user credentials without creating a session
-   * @param email - User email address
+   * @param email - User emais',l address
    * @param password -User password
    * @returns true if valid else false, return an object if not user is found
    */
   async validateUser(email: string, password: string) {
-    const userInfo = await this.prisma.user.findUnique({
-      where: {
-        email: email.toLowerCase(),
-      },
-    });
+    // check for user in the database
+    try {
+      this.logger.log(`Finding user in database`);
+      const userInfo = await this.prisma.user.findUnique({
+        where: {
+          email: email.toLowerCase(),
+        },
+      });
 
-    if (!userInfo) return;
+      if (!userInfo) return { success: false, message: 'user not found' };
 
-    const { password: hashedPassword, id } = userInfo;
-    const isValid = await bcrypt.compare(password, hashedPassword);
-    return { success: true, data: { isValid, id } };
+      const { password: hashedPassword, id } = userInfo;
+      // check if user is valid
+      const isValid = await bcrypt.compare(password, hashedPassword);
+      if (!isValid) return { success: false, message: 'Invalid credentials' };
+
+      return {
+        success: true,
+        message: 'User validated successfully',
+        data: { isValid, id },
+      };
+    } catch (error) {
+      this.logger.error(`Error finding user in database: ${error}`);
+    }
   }
 
   /**
@@ -186,60 +273,6 @@ export class AuthService {
       algorithms: ['HS256'],
     });
     return payload;
-  }
-
-  /**
-   *
-   * @param signUpDto Data transfer object containing email and password
-   * @param ipAddress -User ip address for ip geolocation
-   * @param request -Express request object to extract header
-   * @returns
-   */
-  async signUp(signUpDto: SignUpDto, ipAddress: string, request: Request) {
-    const { email, password } = signUpDto;
-    ipAddress = '146.70.99.180';
-    //check if user Exists
-    try {
-      const response = await fetchLocation(ipAddress);
-      const locationData = response.location;
-      const { state_prov, continent_name, country_name, city } = locationData;
-      const user = await this.prisma.user.findUnique({
-        where: {
-          email: email.toLowerCase(),
-        },
-      });
-
-      if (user)
-        return { success: false, message: 'user already exists', status: 400 };
-
-      // create user in database
-      try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        await this.prisma.user.create({
-          data: {
-            email: email.toLowerCase(),
-            password: hashedPassword,
-            provider: 'local',
-            username: email.split('@')[0],
-            geoData: {
-              create: {
-                region: state_prov,
-                country: country_name,
-                continent: continent_name,
-                city: city,
-              },
-            },
-          },
-        });
-        return { success: true, message: 'signup successful', status: 200 };
-      } catch (error) {
-        console.error(`Error signing up: ${error}`);
-        return { success: false, message: 'signup failed', status: 200 };
-      }
-    } catch (error) {
-      console.log(`Error checking user existence: ${error}`);
-      return { success: false, message: 'fetch failed', status: 400 };
-    }
   }
 
   /**

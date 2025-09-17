@@ -32,12 +32,14 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
    */
   async validate(username: string, password: string) {
     const result = await this.authService.validateUser(username, password);
-    if (!result || result == null || result == undefined) {
-      throw new UnauthorizedException('User not found');
+
+    // check if there is a data key in the returned payload
+    if (result?.data == undefined) {
+      if (result?.message == 'Invalid credentials') {
+        throw new UnauthorizedException('Invalid credentials');
+      }
     }
-    const data = result.data;
-    const { isValid } = data;
-    if (!isValid) throw new UnauthorizedException('Invalid credentials');
-    return data;
+    
+    return result?.data;
   }
 }
